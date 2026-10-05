@@ -284,6 +284,11 @@ export function Dashboard({ session }: { session: Session }) {
 				</a>
 				<div className="dash-plan">
 					<strong>Free plan</strong>
+					<span className="ai-meter" role="img" aria-label={`${session.aiRemaining ?? session.aiDailyLimit} of ${session.aiDailyLimit} assistant requests left today`}>
+						{Array.from({ length: session.aiDailyLimit }, (_, i) => (
+							<span key={i} data-on={i < (session.aiRemaining ?? session.aiDailyLimit) || undefined} />
+						))}
+					</span>
 					<span>
 						{session.aiRemaining ?? session.aiDailyLimit} of {session.aiDailyLimit} assistant requests left today
 					</span>

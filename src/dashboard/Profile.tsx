@@ -80,8 +80,8 @@ export function Profile({ session }: { session: Session }) {
 				)}
 
 				{data && (
-					<>
-						<section className="panel profile-card profile-hero">
+					<div className="panel profile-sheet">
+						<section className="profile-section profile-hero">
 							<Avatar user={data.user} size={64} />
 							<div>
 								<h1>{data.user.name}</h1>
@@ -93,7 +93,7 @@ export function Profile({ session }: { session: Session }) {
 							</div>
 						</section>
 
-						<section className="panel profile-card">
+						<section className="profile-section">
 							<h2>Sign-in methods</h2>
 							<ul className="profile-list">
 								{ALL_PROVIDERS.map((p) => (
@@ -127,7 +127,7 @@ export function Profile({ session }: { session: Session }) {
 							)}
 						</section>
 
-						<section className="panel profile-card" id="plan">
+						<section className="profile-section" id="plan">
 							<h2>Plan and usage</h2>
 							<ul className="profile-list">
 								<li>
@@ -156,7 +156,7 @@ export function Profile({ session }: { session: Session }) {
 							</div>
 						</section>
 
-						<section className="panel profile-card">
+						<section className="profile-section">
 							<h2>Security</h2>
 							<ul className="profile-list">
 								<li>
@@ -169,7 +169,7 @@ export function Profile({ session }: { session: Session }) {
 							</button>
 						</section>
 
-						<section className="panel profile-card profile-danger">
+						<section className="profile-section profile-danger">
 							<h2>Delete account</h2>
 							<p className="small">
 								You'll be logged out everywhere, and your boards go to the trash; their links stop working, including for people editing them now.
@@ -185,7 +185,7 @@ export function Profile({ session }: { session: Session }) {
 								{deleting ? "Scheduling…" : "Delete my account in 30 days"}
 							</button>
 						</section>
-					</>
+					</div>
 				)}
 			</main>
 		</div>

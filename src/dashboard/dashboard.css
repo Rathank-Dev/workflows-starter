@@ -390,7 +390,7 @@
 }
 
 .star-btn[aria-pressed="true"] {
-	color: #e0a100;
+	color: var(--decision);
 }
 
 .star-btn:hover {
@@ -566,15 +566,24 @@ a.board-name-cell:hover strong {
 	gap: 16px;
 }
 
-.profile-card {
+.profile-sheet {
 	position: relative;
-	padding: 22px 24px;
+	padding: 0;
+	overflow: hidden;
+}
+
+.profile-section {
+	padding: 24px 28px;
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 }
 
-.profile-card h2 {
+.profile-section + .profile-section {
+	border-top: 1px solid var(--chrome-line);
+}
+
+.profile-section h2 {
 	margin: 0;
 	font-size: 16px;
 	font-weight: 650;
@@ -631,9 +640,10 @@ a.board-name-cell:hover strong {
 	font-weight: 600;
 }
 
+/* Pass-green: the flow color for "this worked" */
 .pill-on {
-	background: color-mix(in srgb, #2e9455 16%, transparent);
-	color: #2e9455;
+	background: var(--pass-fill);
+	color: var(--pass);
 }
 
 .profile-upgrade {
@@ -641,21 +651,22 @@ a.board-name-cell:hover strong {
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
-	padding: 14px;
+	padding: 14px 16px;
 	border-radius: 10px;
-	background: var(--select-soft);
+	border: 1px dashed var(--chrome-line);
 }
 
 .profile-upgrade p {
 	margin: 2px 0 0;
 }
 
+/* Deny-red: the flow color for a blocked or destructive path */
 .profile-danger {
-	border-color: color-mix(in srgb, var(--danger) 35%, var(--chrome-line));
+	background: color-mix(in srgb, var(--deny-fill) 45%, transparent);
 }
 
 .profile-danger h2 {
-	color: var(--danger);
+	color: var(--deny);
 }
 
 .profile-confirm {
@@ -682,7 +693,7 @@ a.board-name-cell:hover strong {
 	padding: 0 14px;
 	border: 0;
 	border-radius: 8px;
-	background: var(--danger);
+	background: var(--deny);
 	color: #fff;
 	font: inherit;
 	font-weight: 600;
@@ -743,15 +754,41 @@ a.board-name-cell:hover strong {
 }
 
 /* Buttons in profile cards keep their natural width */
-.profile-card > .ghost-btn {
+.profile-section > .ghost-btn {
 	align-self: flex-start;
 }
 
+/* Decision-yellow: something pending that the person can still change */
 .dash-scheduled {
 	margin: 0;
 	padding: 12px 14px;
 	border-radius: 10px;
-	background: color-mix(in srgb, var(--danger) 10%, var(--chrome));
+	border-left: 3px solid var(--decision);
+	background: var(--decision-fill);
 	color: var(--ink) !important;
 	font-size: 14px;
+}
+
+/* Assistant usage meter, in check-purple (the assistant's color) */
+.ai-meter {
+	display: flex;
+	gap: 4px;
+	width: 100%;
+}
+
+.ai-meter span {
+	flex: 1;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--chrome-line);
+}
+
+.ai-meter span[data-on] {
+	background: var(--check);
+}
+
+.dash-boards-head h1,
+.dash-signin-card h1,
+.profile-hero h1 {
+	text-wrap: balance;
 }
