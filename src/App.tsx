@@ -3,6 +3,7 @@ import { Editor } from "./board/Editor";
 import { Dashboard } from "./dashboard/Dashboard";
 import { Profile } from "./dashboard/Profile";
 import { Landing } from "./landing/Landing";
+import { NotFound } from "./notfound/NotFound";
 import { useSession } from "./session";
 
 /** Shared boards have a 32-character hex id in ?board=. Anything else is the browser-only board. */
@@ -59,7 +60,8 @@ function App() {
 	if (isBoardRoute()) return <BoardApp />;
 	if (path === "/dashboard") return <SessionPage page="dashboard" />;
 	if (path === "/profile") return <SessionPage page="profile" />;
-	return <Landing />;
+	if (path === "") return <Landing />;
+	return <NotFound />;
 }
 
 export default App;
