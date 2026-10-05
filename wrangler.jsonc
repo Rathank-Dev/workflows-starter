@@ -4,7 +4,8 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "workflows-starter",
+	"name": "flowyard",
+	"account_id": "1a5db39abcf7968b969241c2bc0cdd18",
 	"main": "worker/index.ts",
 	"compatibility_date": "2025-10-08",
 	// postgres.js uses Node APIs (TCP sockets via cloudflare:sockets, crypto)
@@ -28,7 +29,7 @@
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",
-			"id": "00000000000000000000000000000000"
+			"id": "9a4582478a374aca926731f681d1b3d1"
 		}
 	],
 	/**
@@ -69,11 +70,6 @@
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_sqlite_classes": ["WorkflowStatusDO"]
-		},
-		{
-			"tag": "v2",
-			"deleted_classes": ["WorkflowStatusDO"],
 			"new_sqlite_classes": ["BoardDO"]
 		}
 	],
