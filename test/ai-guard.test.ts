@@ -144,3 +144,23 @@ describe("refunds", () => {
 		vi.restoreAllMocks();
 	});
 });
+
+describe("refunds for thrown provider errors", () => {
+	const fast: AiProviderInfo = { id: "workers-ai", label: "Workers AI", model: "m" };
+	const input: GenerateInput = { system: "s", messages: [{ role: "user", content: "hi" }], schema: z.object({}), jsonSchema: { type: "object" }, example: "{}" };
+	const throwing = (e: unknown) => ({ ...env, AI: { run: vi.fn().mockRejectedValue(e) } }) as unknown as Env;
+
+	it("never refunds errors thrown after generation, such as broken JSON mode", async () => {
+		const r = await generate(fast, throwing(new Error("JSON Mode couldn't be met")), input);
+		expect(r).toMatchObject({ ok: false, billable: true });
+	});
+
+	it("refunds when nothing could have run: capacity exhausted, no connection, local dev", async () => {
+		const cap = await generate(fast, throwing(new Error("4006: daily free allocation of 10,000 neurons used")), input);
+		expect((cap as { billable?: boolean }).billable).toBeFalsy();
+		const net = await generate(fast, throwing(new TypeError("fetch failed")), input);
+		expect((net as { billable?: boolean }).billable).toBeFalsy();
+		const local = await generate(fast, throwing(new Error("no remote")), { ...input, local: true });
+		expect((local as { billable?: boolean }).billable).toBeFalsy();
+	});
+});

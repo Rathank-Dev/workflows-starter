@@ -123,6 +123,11 @@ export async function generate(provider: AiProviderInfo, env: Env, input: Genera
 		}
 	} catch (err) {
 		console.error(`${provider.label} request failed`, err);
+		// Unknown failures count as billable: some providers throw only after
+		// generating (Workers AI "JSON Mode couldn't be met", timeouts), and
+		// refunding those would let anyone loop on purpose-broken prompts.
+		// Refund only when no work can have happened.
+		const couldNotConnect = err instanceof TypeError; // fetch network failure
 		if (provider.id === "workers-ai") {
 			const text = err instanceof Error ? err.message : String(err);
 			if (/neuron|4006|daily free allocation|daily limit/i.test(text)) {
@@ -131,12 +136,13 @@ export async function generate(provider: AiProviderInfo, env: Env, input: Genera
 			return {
 				ok: false,
 				status: 503,
+				billable: !input.local && !couldNotConnect,
 				message: input.local
 					? "Workers AI didn't respond. In local development, set CLOUDFLARE_ACCOUNT_ID in .dev.vars and restart `npm run dev`."
 					: "The AI service didn't respond. Try again in a minute.",
 			};
 		}
-		return { ok: false, status: 502, message: "The AI service ran into a problem. Try again." };
+		return { ok: false, status: 502, billable: !couldNotConnect, message: "The AI service ran into a problem. Try again." };
 	}
 }
 
@@ -190,6 +196,10 @@ async function viaAnthropic(model: string, env: Env, input: GenerateInput): Prom
 			return httpFailure("Claude", 401);
 		}
 		if (err instanceof Anthropic.RateLimitError) return httpFailure("Claude", 429);
+		// A timeout can still be billed if generation finishes after we give up
+		if (err instanceof Anthropic.APIConnectionTimeoutError) {
+			return { ok: false, status: 504, billable: true, message: "The AI service took too long. Try a smaller request." };
+		}
 		if (err instanceof Anthropic.APIError) return httpFailure("Claude", err.status ?? 502);
 		throw err;
 	}
