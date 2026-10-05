@@ -1,0 +1,26 @@
+# Local secrets for `npm run dev` (git-ignored). In production use `wrangler secret put <NAME>`.
+DATABASE_URL="postgres://USER:PASSWORD@HOST:PORT/DB?sslmode=require"
+
+# Sign-in providers. Leave a pair empty to hide that button.
+# Callback URLs to register: <origin>/auth/callback/github | google | discord
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+DISCORD_CLIENT_ID=""
+DISCORD_CLIENT_SECRET=""
+
+# AI assistant (https://console.anthropic.com). Leave empty to turn the assistant off.
+ANTHROPIC_API_KEY=""
+
+# More assistant providers. Any you fill in appear in the assistant's picker.
+GEMINI_API_KEY=""
+DEEPSEEK_API_KEY=""
+# Optional model overrides (defaults: gemini-3.8-flash, deepseek-flash, @cf/meta/llama-3.3-70b-instruct-fp8-fast)
+GEMINI_MODEL=""
+DEEPSEEK_MODEL=""
+WORKERS_AI_MODEL=""
+# Workers AI needs no key. Set WORKERS_AI="off" to hide it.
+WORKERS_AI=""
+# Cloudflare account for Workers AI in local dev (from `npx wrangler whoami`). Not needed in production.
+CLOUDFLARE_ACCOUNT_ID=""

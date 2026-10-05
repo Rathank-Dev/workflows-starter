@@ -7,35 +7,58 @@
 	"name": "workflows-starter",
 	"main": "worker/index.ts",
 	"compatibility_date": "2025-10-08",
+	// postgres.js uses Node APIs (TCP sockets via cloudflare:sockets, crypto)
+	"compatibility_flags": ["nodejs_compat"],
 	"assets": {
 		"directory": "./dist",
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+		// Sign-in redirects are browser navigations; send them to the Worker, not index.html
+		"run_worker_first": ["/api/*", "/auth/*", "/ws"]
 	},
 	"observability": {
 		"enabled": true
 	},
 	/**
-	 * Workflows
-	 * Define Workflows to orchestrate multi-step processes
-	 * https://developers.cloudflare.com/workflows/
+	 * Hyperdrive: pooled, TLS-terminating connection to Postgres.
+	 * Create it once with:
+	 *   npx wrangler hyperdrive create linework-db --connection-string="$DATABASE_URL"
+	 * then paste the id below. Local dev reads the connection string from
+	 * CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE (set by `npm run dev`).
 	 */
-	"workflows": [
+	"hyperdrive": [
 		{
-			"name": "my-workflow",
-			"binding": "MY_WORKFLOW",
-			"class_name": "MyWorkflow"
+			"binding": "HYPERDRIVE",
+			"id": "00000000000000000000000000000000"
 		}
 	],
 	/**
+	 * Rate limits (Workers Rate Limiting). period must be 10 or 60 seconds.
+	 * REQUEST_LIMITER: per IP address, for /api and /auth.
+	 * AI_LIMITER: per signed-in user, a burst cap on the assistant on top of
+	 * its daily limit.
+	 */
+	"ratelimits": [
+		{ "name": "REQUEST_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
+		{ "name": "AI_LIMITER", "namespace_id": "1002", "simple": { "limit": 8, "period": 60 } }
+	],
+	/**
+	 * Workers AI: models that run on Cloudflare, no API key. Billed to your
+	 * Cloudflare account (with a free daily allowance). Local dev calls the real
+	 * service, so run `npx wrangler login` once to use it from `npm run dev`.
+	 */
+	"ai": {
+		"binding": "AI"
+	},
+	/**
 	 * Durable Objects
-	 * Used for WebSocket state management and real-time updates
+	 * One BoardDO per board: stores the document and relays live edits
 	 * https://developers.cloudflare.com/durable-objects/
 	 */
 	"durable_objects": {
 		"bindings": [
 			{
-				"name": "WORKFLOW_STATUS",
-				"class_name": "WorkflowStatusDO"
+				"name": "BOARD",
+				"class_name": "BoardDO"
 			}
 		]
 	},
@@ -47,6 +70,11 @@
 		{
 			"tag": "v1",
 			"new_sqlite_classes": ["WorkflowStatusDO"]
+		},
+		{
+			"tag": "v2",
+			"deleted_classes": ["WorkflowStatusDO"],
+			"new_sqlite_classes": ["BoardDO"]
 		}
 	],
 	"upload_source_maps": true

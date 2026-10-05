@@ -17,19 +17,23 @@
 		"docs_url": "https://developers.cloudflare.com/workflows/"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.131.0",
+		"arctic": "^3.7.0",
+		"postgres": "^3.4.9",
 		"react": "19.2.1",
-		"react-dom": "19.2.1"
+		"react-dom": "19.2.1",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
-		"@cloudflare/vite-plugin": "1.52.1",
-		"@cloudflare/vitest-pool-workers": "0.21.3",
+		"@cloudflare/vite-plugin": "1.62.5",
+		"@cloudflare/vitest-pool-workers": "0.22.0",
 		"@eslint/js": "9.39.1",
 		"@tailwindcss/vite": "4.1.17",
 		"@types/react": "19.2.7",
 		"@types/react-dom": "19.2.3",
 		"@vitejs/plugin-react-swc": "4.0.0",
-		"@vitest/runner": "4.1.10",
-		"@vitest/snapshot": "4.1.10",
+		"@vitest/runner": "4.1.11",
+		"@vitest/snapshot": "4.1.11",
 		"eslint": "9.39.2",
 		"eslint-plugin-react-hooks": "7.0.1",
 		"eslint-plugin-react-refresh": "0.4.24",
@@ -38,8 +42,8 @@
 		"typescript": "5.9.3",
 		"typescript-eslint": "8.48.0",
 		"vite": "^7.0.0",
-		"vitest": "4.1.10",
-		"wrangler": "4.136.1"
+		"vitest": "4.1.11",
+		"wrangler": "4.147.0"
 	},
 	"private": true,
 	"scripts": {
@@ -47,10 +51,19 @@
 		"cf-typegen": "wrangler types",
 		"check": "tsc && wrangler deploy --dry-run",
 		"deploy": "npm run build && wrangler deploy",
-		"dev": "vite",
+		"dev": "node scripts/dev.mjs",
 		"lint": "eslint .",
-		"preview": "npm run build && vite preview",
-		"test": "vitest run"
+		"preview": "npm run build && node scripts/dev.mjs preview",
+		"test": "vitest run",
+		"db:migrate": "node scripts/migrate.mjs"
 	},
-	"type": "module"
+	"type": "module",
+	"overrides": {
+		"@cloudflare/vitest-pool-workers": {
+			"wrangler": "4.147.0",
+			"miniflare": "5.20261001.0-alpha"
+		},
+		"undici": "^7.30.0",
+		"sharp": "^0.35.5"
+	}
 }
