@@ -199,6 +199,22 @@ export const Icons = {
 			<circle cx="12" cy="17" r="0.6" fill="currentColor" />
 		</Icon>
 	),
+	open: () => (
+		<Icon>
+			<path d="M13.5 5.5h5v5M18.5 5.5l-8 8M16 13.5v4a1.5 1.5 0 01-1.5 1.5h-8A1.5 1.5 0 015 17.5v-8A1.5 1.5 0 016.5 8h4" />
+		</Icon>
+	),
+	pencil: () => (
+		<Icon>
+			<path d="M5 19l1-4.2L15.6 5.2a1.8 1.8 0 012.6 0l.6.6a1.8 1.8 0 010 2.6L9.2 18 5 19z" />
+		</Icon>
+	),
+	restore: () => (
+		<Icon>
+			<path d="M5 12a7 7 0 107-7 7.2 7.2 0 00-5.2 2.2L5 9" />
+			<path d="M5 5v4h4" />
+		</Icon>
+	),
 	comment: () => (
 		<Icon>
 			<path d="M4.5 5.5h15v10h-9l-4.5 4v-4h-1.5z" />
