@@ -102,12 +102,12 @@ describe("BoardDO connection cap", () => {
 		for (let i = 0; i < MAX_CONNECTIONS; i++) {
 			// Spread across addresses so the per-IP limit doesn't trigger first
 			const ip = `10.1.${Math.floor(i / 5)}.${i % 5}`;
-			const res = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } });
+			const res = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip, "X-Flowyard-Role": "edit" } });
 			expect(res.status).toBe(101);
 			res.webSocket!.accept();
 			open.push(res.webSocket!);
 		}
-		const over = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": "10.2.0.1" } });
+		const over = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": "10.2.0.1", "X-Flowyard-Role": "edit" } });
 		expect(over.status).toBe(429);
 		for (const ws of open) ws.close(1000);
 	});
@@ -117,7 +117,7 @@ describe("BoardDO connection cap", () => {
 		const { MAX_CONNECTIONS_PER_IP } = await import("../worker/board-do");
 		const stub = env.BOARD.get(env.BOARD.idFromName(`ipcap-${Date.now()}`));
 		const open: WebSocket[] = [];
-		const connect = (ip: string) => stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } });
+		const connect = (ip: string) => stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip, "X-Flowyard-Role": "edit" } });
 		for (let i = 0; i < MAX_CONNECTIONS_PER_IP; i++) {
 			const res = await connect("10.3.0.1");
 			expect(res.status).toBe(101);

@@ -32,7 +32,12 @@ export async function listDashboard(sql: Sql, user: User): Promise<Response> {
 		join users u on u.id = b.owner_id
 		left join board_visits v on v.board_id = b.id and v.user_id = ${user.id}
 		left join board_stars s on s.board_id = b.id and s.user_id = ${user.id}
-		where b.owner_id = ${user.id} or (v.user_id is not null and b.deleted_at is null)
+		-- Other people's boards only while the user can still open them: as a
+		-- member, or as a past visitor while the link isn't locked
+		where b.owner_id = ${user.id}
+			or (b.deleted_at is null and (
+				exists (select 1 from board_members m where m.board_id = b.id and m.user_id = ${user.id})
+				or (v.user_id is not null and b.link_access <> 'none')))
 		order by coalesce(v.last_opened_at, b.updated_at) desc
 		limit 500
 	`;
@@ -52,7 +57,9 @@ export async function setStar(request: Request, sql: Sql, user: User, id: string
 		select ${user.id}, b.id from boards b
 		where b.id = ${id} and b.deleted_at is null
 			and (b.owner_id = ${user.id}
-				or exists (select 1 from board_visits v where v.board_id = b.id and v.user_id = ${user.id}))
+				or exists (select 1 from board_members m where m.board_id = b.id and m.user_id = ${user.id})
+				or (b.link_access <> 'none'
+					and exists (select 1 from board_visits v where v.board_id = b.id and v.user_id = ${user.id})))
 		on conflict do nothing
 		returning board_id
 	`;

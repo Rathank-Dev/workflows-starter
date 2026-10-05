@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PROVIDER_LABEL, signInUrl, type Session } from "../session";
 
-function Dialog({
+export function Dialog({
 	title,
 	onClose,
 	children,
 	labelledBy,
+	className,
 }: {
 	title: string;
 	onClose: () => void;
 	children: ReactNode;
 	labelledBy: string;
+	className?: string;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	useEffect(() => {
@@ -31,7 +33,7 @@ function Dialog({
 
 	return (
 		<div className="scrim" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-			<div className="panel dialog" role="dialog" aria-modal="true" aria-labelledby={labelledBy} ref={ref}>
+			<div className={`panel dialog ${className ?? ""}`} role="dialog" aria-modal="true" aria-labelledby={labelledBy} ref={ref}>
 				<header>
 					<h2 id={labelledBy}>{title}</h2>
 					<button type="button" className="text-btn" onClick={onClose}>
@@ -44,13 +46,17 @@ function Dialog({
 	);
 }
 
-export type SignInReason = "share" | "assistant" | "boards" | "general";
+export type SignInReason = "share" | "assistant" | "boards" | "general" | "invite" | "comment" | "record" | "access";
 
 const REASON_TEXT: Record<SignInReason, string> = {
 	share: "Sign in to create a share link. Your board stays saved in this browser while you do.",
 	assistant: "Sign in to use the assistant.",
 	boards: "Sign in to see the boards you've shared.",
 	general: "Sign in to share boards and use the assistant. You can keep drawing without an account.",
+	invite: "Sign in to join this board. The invite link keeps working after you sign in.",
+	comment: "Sign in to comment. Comments show your name to everyone on the board.",
+	record: "Sign in to record a walkthrough of this board.",
+	access: "This board is private. Sign in with the account that was invited to open it.",
 };
 
 export function SignInDialog({
@@ -79,31 +85,6 @@ export function SignInDialog({
 				</div>
 			)}
 			<p className="dialog-note">No password needed. We only read your name and profile picture.</p>
-		</Dialog>
-	);
-}
-
-export function ShareDialog({ link, onClose, onCopied }: { link: string; onClose: () => void; onCopied: () => void }) {
-	const inputRef = useRef<HTMLInputElement>(null);
-	const [copied, setCopied] = useState(false);
-	const copy = async () => {
-		try {
-			await navigator.clipboard.writeText(link);
-			setCopied(true);
-			onCopied();
-		} catch {
-			inputRef.current?.select();
-		}
-	};
-	return (
-		<Dialog title="Share board" labelledBy="share-title" onClose={onClose}>
-			<p className="dialog-text">Anyone with this link can view and edit the board. Changes show up live for everyone.</p>
-			<div className="share-row">
-				<input ref={inputRef} readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} />
-				<button type="button" className="primary-btn" onClick={copy}>
-					{copied ? "Copied" : "Copy link"}
-				</button>
-			</div>
 		</Dialog>
 	);
 }

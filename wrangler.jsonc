@@ -14,7 +14,7 @@
 		"directory": "./dist",
 		"not_found_handling": "single-page-application",
 		// Sign-in redirects are browser navigations; send them to the Worker, not index.html
-		"run_worker_first": ["/api/*", "/auth/*", "/ws"]
+		"run_worker_first": ["/api/*", "/auth/*", "/ws", "/r/*"]
 	},
 	/**
 	 * Daily cleanup at 03:17 UTC: finishes 30-day account deletions, empties
@@ -57,6 +57,16 @@
 	"ai": {
 		"binding": "AI"
 	},
+	/**
+	 * R2: walkthrough videos, at recordings/<board id>/<recording id>.
+	 * Create once with: npx wrangler r2 bucket create flowyard-recordings
+	 */
+	"r2_buckets": [
+		{
+			"binding": "RECORDINGS",
+			"bucket_name": "flowyard-recordings"
+		}
+	],
 	/**
 	 * Durable Objects
 	 * One BoardDO per board: stores the document and relays live edits

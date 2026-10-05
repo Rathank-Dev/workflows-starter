@@ -1,5 +1,6 @@
 import { Discord, GitHub, Google, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
 import { cancelPendingDeletion } from "./account";
+import { REFERRAL_COOKIE, referralFrom } from "./referrals";
 import type { Sql, User } from "./db";
 import { error, getCookie, randomToken, safeReturnTo, setCookie, sha256Hex } from "./http";
 
@@ -164,7 +165,7 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 		return fail("failed");
 	}
 
-	const user = await upsertUser(sql, provider, profile);
+	const user = await upsertUser(sql, provider, profile, referralFrom(request));
 	// Signing in within the 30 days cancels a scheduled account deletion
 	const restored = await cancelPendingDeletion(sql, user.id);
 	const token = randomToken();
@@ -177,11 +178,13 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 
 	const headers = new Headers({ Location: restored ? "/dashboard?account_restored=1" : safeReturnTo(saved.r) });
 	headers.append("Set-Cookie", clearState);
+	if (referralFrom(request)) headers.append("Set-Cookie", setCookie(REFERRAL_COOKIE, "", { maxAge: 0 }));
 	headers.append("Set-Cookie", setCookie(SESSION_COOKIE, token, { maxAge: SESSION_DAYS * 86400 }));
 	return new Response(null, { status: 302, headers });
 }
 
-async function upsertUser(sql: Sql, provider: Provider, p: Profile): Promise<User> {
+/** referralCode: from the visitor's invite cookie; only counts for a brand-new account. */
+async function upsertUser(sql: Sql, provider: Provider, p: Profile, referralCode: string | null): Promise<User> {
 	return sql.begin(async (tx) => {
 		const [existing] = await tx<User[]>`
 			select u.id, u.name, u.email, u.avatar_url
@@ -197,8 +200,11 @@ async function upsertUser(sql: Sql, provider: Provider, p: Profile): Promise<Use
 			return updated;
 		}
 		const [created] = await tx<User[]>`
-			insert into users (name, email, avatar_url)
-			values (${p.name.slice(0, 120)}, ${p.email}, ${p.avatar})
+			insert into users (name, email, avatar_url, referred_by)
+			values (
+				${p.name.slice(0, 120)}, ${p.email}, ${p.avatar},
+				(select id from users where referral_code = ${referralCode})
+			)
 			returning id, name, email, avatar_url
 		`;
 		await tx`

@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_DOC_BYTES, parseBoard, type Board } from "../shared/board";
+import { parseCommentOp, type BoardComment, MAX_COMMENTS } from "../shared/comments";
+import type { Role } from "./access";
 
 /**
  * BoardDO - one instance per board.
@@ -7,8 +9,12 @@ import { MAX_DOC_BYTES, parseBoard, type Board } from "../shared/board";
  * - Stores the board document in SQLite (values can exceed the 128 KiB KV limit)
  * - Accepts WebSockets with the hibernation API
  * - Saves updates from one client and relays them to everyone else
+ * - Keeps comment threads in their own table, so document saves never drop them
  *
  * Conflicts resolve as last write wins for the whole document.
+ *
+ * The Worker decides who may connect and passes the result in headers it sets
+ * itself (ROLE_HEADER and friends); this object trusts them and nothing else.
  */
 /** Per-connection write budget: a steady 10 saves a second, bursts up to 30. */
 const WRITE_RATE = 10;
@@ -20,6 +26,31 @@ export const MAX_CONNECTIONS = 50;
  * team sharing an office network.
  */
 export const MAX_CONNECTIONS_PER_IP = 10;
+
+export const ROLE_HEADER = "X-Flowyard-Role";
+export const USER_HEADER = "X-Flowyard-User";
+export const NAME_HEADER = "X-Flowyard-Name";
+
+/** Who is on the other end of a socket. Survives hibernation. */
+interface Peer {
+	role: Role;
+	userId: string | null;
+	name: string | null;
+}
+
+function peerOf(ws: WebSocket): Peer {
+	const p = ws.deserializeAttachment() as Peer | null;
+	// Sockets from before roles existed can only look
+	return p ?? { role: "view", userId: null, name: null };
+}
+
+function send(ws: WebSocket, data: unknown): void {
+	try {
+		ws.send(JSON.stringify(data));
+	} catch {
+		// Socket already closed
+	}
+}
 
 export class BoardDO extends DurableObject<Env> {
 	private sql: SqlStorage;
@@ -47,6 +78,12 @@ export class BoardDO extends DurableObject<Env> {
 		this.sql.exec(
 			"CREATE TABLE IF NOT EXISTS board (id INTEGER PRIMARY KEY CHECK (id = 1), doc TEXT NOT NULL, rev INTEGER NOT NULL)",
 		);
+		this.sql.exec(
+			`CREATE TABLE IF NOT EXISTS comments (
+				id TEXT PRIMARY KEY, parent TEXT, x REAL NOT NULL, y REAL NOT NULL, text TEXT NOT NULL,
+				author_id TEXT NOT NULL, author_name TEXT NOT NULL, at INTEGER NOT NULL, resolved INTEGER NOT NULL DEFAULT 0
+			)`,
+		);
 	}
 
 	async fetch(request: Request): Promise<Response> {
@@ -61,12 +98,23 @@ export class BoardDO extends DurableObject<Env> {
 		if (this.ctx.getWebSockets(ipTag).length >= MAX_CONNECTIONS_PER_IP) {
 			return new Response("Too many open connections to this board from your network.", { status: 429 });
 		}
+		const role = request.headers.get(ROLE_HEADER);
+		if (role !== "owner" && role !== "edit" && role !== "view") {
+			return new Response("Forbidden", { status: 403 });
+		}
+		const userId = request.headers.get(USER_HEADER);
+		const rawName = request.headers.get(NAME_HEADER);
+		const peer: Peer = { role, userId: userId || null, name: rawName ? decodeURIComponent(rawName).slice(0, 120) : null };
+
 		const pair = new WebSocketPair();
 		const [client, server] = Object.values(pair);
 		this.ctx.acceptWebSocket(server, [ipTag]);
+		server.serializeAttachment(peer);
 
 		const { doc, rev } = this.read();
+		server.send(JSON.stringify({ type: "hello", role, canComment: peer.userId !== null }));
 		server.send(JSON.stringify({ type: "doc", doc, rev }));
+		server.send(JSON.stringify({ type: "comments", items: this.comments() }));
 		this.broadcastPresence();
 
 		return new Response(null, { status: 101, webSocket: client });
@@ -90,6 +138,21 @@ export class BoardDO extends DurableObject<Env> {
 			rev,
 		);
 		return rev;
+	}
+
+	/**
+	 * Sharing changed: drop everyone except the owner. Their clients reconnect
+	 * straight away and the Worker checks their access again.
+	 */
+	async refreshAccess(): Promise<void> {
+		for (const socket of this.ctx.getWebSockets()) {
+			if (peerOf(socket).role === "owner") continue;
+			try {
+				socket.close(4001, "Access changed");
+			} catch {
+				// Already closed
+			}
+		}
 	}
 
 	/** Disconnects everyone viewing (board moved to trash). Content is kept for restore. */
@@ -130,8 +193,19 @@ export class BoardDO extends DurableObject<Env> {
 		} catch {
 			return;
 		}
-		if (typeof data !== "object" || data === null || (data as { type?: unknown }).type !== "update") return;
+		if (typeof data !== "object" || data === null) return;
+		const type = (data as { type?: unknown }).type;
+		if (typeof type === "string" && type.startsWith("comment:")) {
+			this.onComment(ws, data);
+			return;
+		}
+		if (type !== "update") return;
 
+		const peer = peerOf(ws);
+		if (peer.role !== "owner" && peer.role !== "edit") {
+			send(ws, { type: "error", message: "You can view this board but not edit it." });
+			return;
+		}
 		if (!this.allowWrite(ws)) {
 			ws.send(JSON.stringify({ type: "error", message: "Edits are arriving too fast. Some were skipped; keep going and they'll catch up." }));
 			return;
@@ -165,6 +239,131 @@ export class BoardDO extends DurableObject<Env> {
 		this.broadcastPresence(ws);
 	}
 
+	private onComment(ws: WebSocket, data: object): void {
+		const peer = peerOf(ws);
+		if (!peer.userId || !peer.name) {
+			send(ws, { type: "error", message: "Sign in to comment." });
+			return;
+		}
+		if (!this.allowWrite(ws)) {
+			send(ws, { type: "error", message: "Slow down a little; that comment wasn't saved." });
+			return;
+		}
+		const op = parseCommentOp(data);
+		if (!op) {
+			send(ws, { type: "error", message: "That comment couldn't be saved." });
+			return;
+		}
+		if (op.type === "comment:add" || op.type === "comment:reply") {
+			const [{ n }] = this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM comments").toArray();
+			if (n >= MAX_COMMENTS) {
+				send(ws, { type: "error", message: "This board has reached its comment limit. Resolve and delete old threads to add more." });
+				return;
+			}
+			let x = 0;
+			let y = 0;
+			let parent: string | null = null;
+			if (op.type === "comment:reply") {
+				const thread = this.comment(op.parent);
+				if (!thread || thread.parent !== null) {
+					send(ws, { type: "error", message: "That thread was deleted." });
+					return;
+				}
+				parent = thread.id;
+				x = thread.x;
+				y = thread.y;
+			} else {
+				x = op.x;
+				y = op.y;
+			}
+			const c: BoardComment = {
+				id: crypto.randomUUID(),
+				parent,
+				x,
+				y,
+				text: op.text,
+				authorId: peer.userId,
+				authorName: peer.name,
+				at: Date.now(),
+				resolved: false,
+			};
+			this.sql.exec(
+				"INSERT INTO comments (id, parent, x, y, text, author_id, author_name, at, resolved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
+				c.id,
+				c.parent,
+				c.x,
+				c.y,
+				c.text,
+				c.authorId,
+				c.authorName,
+				c.at,
+			);
+			this.broadcast({ type: "comment", comment: c });
+			return;
+		}
+		const target = this.comment(op.id);
+		if (!target) return;
+		if (op.type === "comment:resolve") {
+			if (target.parent !== null) return;
+			this.sql.exec("UPDATE comments SET resolved = ? WHERE id = ?", op.resolved ? 1 : 0, target.id);
+			this.broadcast({ type: "comment", comment: { ...target, resolved: op.resolved } });
+			return;
+		}
+		if (op.type === "comment:move") {
+			if (target.parent !== null || (target.authorId !== peer.userId && peer.role !== "owner")) return;
+			this.sql.exec("UPDATE comments SET x = ?, y = ? WHERE id = ? OR parent = ?", op.x, op.y, target.id, target.id);
+			for (const c of this.comments().filter((c) => c.id === target.id || c.parent === target.id)) {
+				this.broadcast({ type: "comment", comment: c });
+			}
+			return;
+		}
+		// Delete: the author, or the board owner. Deleting a thread removes its replies.
+		if (target.authorId !== peer.userId && peer.role !== "owner") {
+			send(ws, { type: "error", message: "Only the comment's author or the board owner can delete it." });
+			return;
+		}
+		const ids = this.sql
+			.exec<{ id: string }>("SELECT id FROM comments WHERE id = ? OR parent = ?", target.id, target.id)
+			.toArray()
+			.map((r) => r.id);
+		this.sql.exec("DELETE FROM comments WHERE id = ? OR parent = ?", target.id, target.id);
+		this.broadcast({ type: "comment:removed", ids });
+	}
+
+	private comment(id: string): BoardComment | null {
+		return this.comments(id)[0] ?? null;
+	}
+
+	private comments(id?: string): BoardComment[] {
+		const rows = (
+			id
+				? this.sql.exec<CommentRow>("SELECT * FROM comments WHERE id = ?", id)
+				: this.sql.exec<CommentRow>("SELECT * FROM comments ORDER BY at")
+		).toArray();
+		return rows.map((r) => ({
+			id: r.id,
+			parent: r.parent,
+			x: r.x,
+			y: r.y,
+			text: r.text,
+			authorId: r.author_id,
+			authorName: r.author_name,
+			at: r.at,
+			resolved: r.resolved === 1,
+		}));
+	}
+
+	private broadcast(data: unknown): void {
+		const msg = JSON.stringify(data);
+		for (const socket of this.ctx.getWebSockets()) {
+			try {
+				socket.send(msg);
+			} catch {
+				// Socket already closed
+			}
+		}
+	}
+
 	private read(): { doc: Board | null; rev: number } {
 		const row = this.sql.exec<{ doc: string; rev: number }>("SELECT doc, rev FROM board WHERE id = 1").toArray()[0];
 		if (!row) return { doc: null, rev: 0 };
@@ -173,7 +372,17 @@ export class BoardDO extends DurableObject<Env> {
 
 	private broadcastPresence(closing?: WebSocket): void {
 		const sockets = this.ctx.getWebSockets().filter((s) => s !== closing && s.readyState === WebSocket.OPEN);
-		const msg = JSON.stringify({ type: "presence", count: sockets.length });
+		// Signed-in people by name, once each, for "here now"
+		const people = new Map<string, string>();
+		for (const s of sockets) {
+			const p = peerOf(s);
+			if (p.userId && p.name) people.set(p.userId, p.name);
+		}
+		const msg = JSON.stringify({
+			type: "presence",
+			count: sockets.length,
+			people: Array.from(people, ([id, name]) => ({ id, name })).slice(0, 50),
+		});
 		for (const socket of sockets) {
 			try {
 				socket.send(msg);
@@ -183,3 +392,15 @@ export class BoardDO extends DurableObject<Env> {
 		}
 	}
 }
+
+type CommentRow = {
+	id: string;
+	parent: string | null;
+	x: number;
+	y: number;
+	text: string;
+	author_id: string;
+	author_name: string;
+	at: number;
+	resolved: number;
+};
