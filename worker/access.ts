@@ -25,6 +25,8 @@ export interface BoardAccess {
 	role: Role | null;
 	ownerId: string | null;
 	linkAccess: LinkAccess;
+	/** True for the owner and invited members; false for people here only through the link. */
+	isMember: boolean;
 }
 
 /**
@@ -38,10 +40,16 @@ export async function boardAccess(sql: Sql, boardId: string, user: User | null):
 		left join board_members m on m.board_id = b.id and m.user_id = ${user?.id ?? null}
 		where b.id = ${boardId} and b.deleted_at is null
 	`;
-	if (!row) return { exists: false, role: null, ownerId: null, linkAccess: "none" };
+	if (!row) return { exists: false, role: null, ownerId: null, linkAccess: "none", isMember: false };
 	if (user && row.owner_id === user.id) {
-		return { exists: true, role: "owner", ownerId: row.owner_id, linkAccess: row.link_access };
+		return { exists: true, role: "owner", ownerId: row.owner_id, linkAccess: row.link_access, isMember: true };
 	}
 	const linkRole: Role | null = row.link_access === "none" ? null : row.link_access;
-	return { exists: true, role: best(row.member_role, linkRole), ownerId: row.owner_id, linkAccess: row.link_access };
+	return {
+		exists: true,
+		role: best(row.member_role, linkRole),
+		ownerId: row.owner_id,
+		linkAccess: row.link_access,
+		isMember: row.member_role !== null,
+	};
 }

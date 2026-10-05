@@ -12,7 +12,7 @@ import {
 	trashBoard,
 } from "./dashboard";
 import { connect, type Sql } from "./db";
-import { boardAccess } from "./access";
+import { boardAccess, canEdit } from "./access";
 import { NAME_HEADER, ROLE_HEADER, USER_HEADER } from "./board-do";
 import {
 	MAX_RECORDING_BYTES,
@@ -290,11 +290,10 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 			const body = (await request.json().catch(() => null)) as { name?: unknown } | null;
 			const name = typeof body?.name === "string" ? body.name.trim().slice(0, 120) : "";
 			if (!name) return error("Give the board a name.", 400);
-			const rows = await db()`
-				update boards set name = ${name}, updated_at = now()
-				where id = ${id} and owner_id = ${user.id} returning id
-			`;
-			return rows.length ? json({ ok: true }) : error("Only the board's owner can rename it.", 403);
+			// Anyone who can edit can rename (the name is part of the board), so the dashboard stays in step
+			if (!canEdit((await boardAccess(db(), id, user)).role)) return error("You can't rename this board.", 403);
+			await db()`update boards set name = ${name}, updated_at = now() where id = ${id}`;
+			return json({ ok: true });
 		}
 		if (method === "DELETE") {
 			const rows = await db()`delete from boards where id = ${id} and owner_id = ${user.id} returning id`;
@@ -321,11 +320,15 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		if (request.headers.get("Upgrade") !== "websocket") {
 			return new Response("Expected Upgrade: websocket", { status: 426 });
 		}
+		// Browsers always send Origin on WebSockets; refuse other sites opening one with our cookies
+		const origin = request.headers.get("Origin");
+		if (origin !== null && origin !== url.origin) return new Response("Cross-site connection blocked", { status: 403 });
 		// Only boards someone signed in to create, and not in the trash, open live.
 		const visitor = await currentUser(request, db());
 		const access = await boardAccess(db(), id, visitor);
-		if (!access.exists) return new Response("Board not found", { status: 404 });
-		if (!access.role) return deniedSocket(visitor !== null);
+		// Say so over the socket: a failed upgrade would just look like being offline
+		if (!access.exists) return closedSocket({ type: "deleted" }, 4404, "Board not found");
+		if (!access.role) return closedSocket({ type: "denied", signedIn: visitor !== null }, 4403, "No access");
 		await db()`update boards set updated_at = now() where id = ${id}`;
 		// Remember it for the signed-in visitor's Recent and "Shared with me"
 		if (visitor) {
@@ -354,10 +357,10 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
  * A browser can't read why a WebSocket upgrade failed, so a refusal is sent as
  * a socket that says why and closes.
  */
-function deniedSocket(signedIn: boolean): Response {
+function closedSocket(message: unknown, code: number, reason: string): Response {
 	const [client, server] = Object.values(new WebSocketPair());
 	server.accept();
-	server.send(JSON.stringify({ type: "denied", signedIn }));
-	server.close(4403, "No access");
+	server.send(JSON.stringify(message));
+	server.close(code, reason);
 	return new Response(null, { status: 101, webSocket: client });
 }

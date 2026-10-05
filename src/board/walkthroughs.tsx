@@ -114,6 +114,8 @@ export function useRecorder(onTake: (take: Take) => void, onError: (message: str
 	}, [onTake, onError]);
 
 	const stop = useCallback(() => stopRef.current?.(), []);
+	// Leaving the board ends the recording and releases the screen and microphone
+	useEffect(() => () => stopRef.current?.(), []);
 	return { recording, elapsed, start, stop };
 }
 

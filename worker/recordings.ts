@@ -88,15 +88,42 @@ export async function uploadRecording(request: Request, sql: Sql, env: Env, user
 		return error(`You've used all ${FREE_RECORDINGS} walkthroughs on the Free plan. Delete one to record another.`, 402);
 	}
 
+	// Check the first bytes really are the claimed video type before storing anything
+	const reader = request.body.getReader();
+	const head: Uint8Array[] = [];
+	let headLength = 0;
+	while (headLength < 12) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		head.push(value);
+		headLength += value.byteLength;
+	}
+	const first = new Uint8Array(headLength);
+	head.reduce((at, chunk) => (first.set(chunk, at), at + chunk.byteLength), 0);
+	if (!looksLike(type, first)) {
+		await reader.cancel();
+		return error("That file isn't a playable video.", 415);
+	}
+	// Stream what was read plus the rest into storage, at the declared length
+	const { readable, writable } = new FixedLengthStream(bytes);
+	const pump = (async () => {
+		const writer = writable.getWriter();
+		for (const chunk of head) await writer.write(chunk);
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			await writer.write(value);
+		}
+		await writer.close();
+	})();
+
 	const id = randomHex(16);
 	const key = objectKey(boardId, id);
-	await env.RECORDINGS.put(key, request.body, { httpMetadata: { contentType: type } });
-	// Check the file really is the video type it claims before keeping it
-	const head = await env.RECORDINGS.get(key, { range: { offset: 0, length: 12 } });
-	const headBytes = head ? new Uint8Array(await head.arrayBuffer()) : new Uint8Array();
-	if (!looksLike(type, headBytes)) {
+	try {
+		await Promise.all([env.RECORDINGS.put(key, readable, { httpMetadata: { contentType: type } }), pump]);
+	} catch {
 		await env.RECORDINGS.delete(key);
-		return error("That file isn't a playable video.", 415);
+		return error("The upload didn't finish. Try again.", 400);
 	}
 	// Re-check the limit after the upload, so two uploads at once can't both slip in
 	const [row] = await sql<{ id: string }[]>`
@@ -121,17 +148,21 @@ export async function playRecording(request: Request, sql: Sql, env: Env, user: 
 	const access = await boardAccess(sql, rec.board_id, user);
 	if (!access.role) return error("Recording not found.", 404);
 
-	const object = await env.RECORDINGS.get(objectKey(rec.board_id, id), { range: request.headers });
+	const key = objectKey(rec.board_id, id);
+	// A malformed or unsatisfiable Range makes R2 throw; fall back to the whole file
+	const object = await env.RECORDINGS.get(key, { range: request.headers }).catch(() => env.RECORDINGS.get(key));
 	if (!object) return error("Recording not found.", 404);
 	const headers = new Headers(SECURITY_HEADERS);
 	headers.set("Content-Type", rec.content_type);
 	headers.set("Accept-Ranges", "bytes");
 	headers.set("Cache-Control", "private, max-age=3600");
 	headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
-	const range = object.range as { offset?: number; length?: number } | undefined;
-	if (request.headers.has("Range") && range && range.offset !== undefined) {
-		const length = range.length ?? object.size - range.offset;
-		headers.set("Content-Range", `bytes ${range.offset}-${range.offset + length - 1}/${object.size}`);
+	// R2 describes the served part as an offset and/or length, or as the last `suffix` bytes
+	const range = object.range as { offset?: number; length?: number; suffix?: number } | undefined;
+	if (/^bytes=\d*-\d*$/.test(request.headers.get("Range") ?? "") && range) {
+		const start = range.suffix !== undefined ? Math.max(0, object.size - range.suffix) : (range.offset ?? 0);
+		const length = range.suffix !== undefined ? object.size - start : (range.length ?? object.size - start);
+		headers.set("Content-Range", `bytes ${start}-${start + length - 1}/${object.size}`);
 		headers.set("Content-Length", String(length));
 		return new Response(object.body, { status: 206, headers });
 	}
