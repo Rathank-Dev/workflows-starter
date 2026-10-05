@@ -50,7 +50,7 @@
 		"build": "tsc -b && vite build",
 		"cf-typegen": "wrangler types",
 		"check": "tsc && wrangler deploy --dry-run",
-		"deploy": "npm run build && wrangler deploy",
+		"deploy": "npm run build && node scripts/deploy.mjs",
 		"dev": "node scripts/dev.mjs",
 		"lint": "eslint .",
 		"preview": "npm run build && node scripts/dev.mjs preview",
