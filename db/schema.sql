@@ -76,3 +76,43 @@ create table if not exists board_stars (
 -- daily job deletes accounts whose 30 days have passed.
 alter table users add column if not exists deletion_requested_at timestamptz;
 alter table boards add column if not exists trashed_with_account boolean not null default false;
+
+-- Sharing. link_access is what "anyone with the link" can do; members (added
+-- through an invite link) keep their role even when the link is locked down.
+alter table boards add column if not exists link_access text not null default 'edit';
+do $$ begin
+	alter table boards add constraint boards_link_access_check check (link_access in ('edit', 'view', 'none'));
+exception when duplicate_object then null; end $$;
+-- One invite link per board; resetting it makes the old one stop working.
+alter table boards add column if not exists invite_token text;
+alter table boards add column if not exists invite_role text not null default 'edit';
+do $$ begin
+	alter table boards add constraint boards_invite_role_check check (invite_role in ('edit', 'view'));
+exception when duplicate_object then null; end $$;
+
+create table if not exists board_members (
+	board_id text not null references boards (id) on delete cascade,
+	user_id uuid not null references users (id) on delete cascade,
+	role text not null check (role in ('edit', 'view')),
+	added_at timestamptz not null default now(),
+	primary key (board_id, user_id)
+);
+create index if not exists board_members_user_idx on board_members (user_id);
+
+-- Video walkthroughs. The video lives in R2 at recordings/<board_id>/<id>.
+create table if not exists recordings (
+	id text primary key,
+	board_id text not null references boards (id) on delete cascade,
+	user_id uuid not null references users (id) on delete cascade,
+	title text not null,
+	duration_ms integer not null,
+	bytes integer not null,
+	content_type text not null,
+	created_at timestamptz not null default now()
+);
+create index if not exists recordings_board_idx on recordings (board_id, created_at desc);
+create index if not exists recordings_user_idx on recordings (user_id);
+
+-- Invite rewards: each person's referral code, and who invited whom.
+alter table users add column if not exists referral_code text unique;
+alter table users add column if not exists referred_by uuid references users (id) on delete set null;

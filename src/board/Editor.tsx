@@ -32,7 +32,10 @@ import {
 	type FlowTemplate,
 } from "../../shared/templates";
 import type { Session } from "../session";
-import { AccountButton, ShareDialog, SignInDialog, type SignInReason } from "./account";
+import { AccountButton, SignInDialog, type SignInReason } from "./account";
+import { CommentPins, CommentsPanel, NewComment, ThreadPopover, useThreads } from "./comments";
+import { ShareDialog } from "./ShareDialog";
+import { PlayerDialog, RecordingBar, SaveTakeDialog, WalkthroughPanel, useRecorder, type Recording, type Take } from "./walkthroughs";
 import { AssistantPanel, type AssistantContext } from "./AssistantPanel";
 import {
 	BoardMenu,
@@ -48,7 +51,7 @@ import {
 	type ContextActions,
 } from "./chrome";
 import { Icons } from "./icons";
-import { TOOL_KEYS, type Tool } from "./tools";
+import { TOOL_KEYS, VIEW_TOOLS, type Tool } from "./tools";
 import { boardToPng, boardToSvg, download, fileSafe } from "./exporting";
 import { addElements, cloneElements, collectForCopy, deleteElements, frameChildren, patchElements, reorder } from "./ops";
 import { EdgeMarkers, Scene } from "./Scene";
@@ -142,6 +145,13 @@ export function Editor({
 	const [shareOpen, setShareOpen] = useState(justShared);
 	const [sharing, setSharing] = useState(false);
 	const [toast, setToast] = useState<string | null>(null);
+	const [commentsOpen, setCommentsOpen] = useState(false);
+	const [openThread, setOpenThread] = useState<string | null>(null);
+	const [draftAt, setDraftAt] = useState<Point | null>(null);
+	const [walkOpen, setWalkOpen] = useState(false);
+	const [take, setTake] = useState<Take | null>(null);
+	const [playing, setPlaying] = useState<Recording | null>(null);
+	const [walkRefresh, setWalkRefresh] = useState(0);
 	const [, setFontsTick] = useState(0);
 
 	const drag = useRef<Drag | null>(null);
@@ -159,6 +169,15 @@ export function Editor({
 		setToast(msg);
 		window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 2400);
 	}, []);
+
+	const threads = useThreads(doc.comments);
+	const activeThread = openThread ? (threads.find((t) => t.root.id === openThread) ?? null) : null;
+	const recorder = useRecorder(setTake, say);
+
+	// View-only: drop any drawing tool
+	useEffect(() => {
+		if (!doc.canEdit && !VIEW_TOOLS.has(tool)) setTool("select");
+	}, [doc.canEdit, tool]);
 
 	useEffect(() => {
 		if (doc.error) say(doc.error);
@@ -445,6 +464,14 @@ export function Editor({
 		}
 		if (e.button !== 0) return;
 
+		if (tool === "comment") {
+			setOpenThread(null);
+			if (!boardId) say("Share the board to add comments.");
+			else if (!doc.canComment) setSignIn("comment");
+			else setDraftAt(p);
+			return;
+		}
+
 		if (CREATE_TOOLS.has(tool)) {
 			drag.current = { mode: "create", tool: tool as "frame" | "text" | ShapeKind, start: p };
 			return;
@@ -662,6 +689,7 @@ export function Editor({
 	};
 
 	const onDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+		if (!doc.canEdit) return;
 		if (tool !== "select") return;
 		const target = e.target as Element;
 		if (target.closest("[data-handle],[data-knob]")) return;
@@ -685,6 +713,9 @@ export function Editor({
 			if (isTypingTarget(e.target) || document.querySelector('[aria-modal="true"]')) return;
 			const mod = e.metaKey || e.ctrlKey;
 			const key = e.key.toLowerCase();
+			// View-only: no drawing tools, no edit shortcuts
+			if (!doc.canEdit && !mod && TOOL_KEYS[key] && !VIEW_TOOLS.has(TOOL_KEYS[key])) return;
+			if (!doc.canEdit && e.key === "Enter") return;
 
 			if (e.key === " ") {
 				e.preventDefault();
@@ -755,6 +786,8 @@ export function Editor({
 				removeSelected();
 			} else if (e.key === "Escape") {
 				setSelection(new Set());
+				setDraftAt(null);
+				setOpenThread(null);
 				setTool("select");
 				setTemplatesOpen(false);
 				setHelpOpen(false);
@@ -862,6 +895,8 @@ export function Editor({
 	/** Shared boards: show the link. Browser-only boards: sign in, then create one. */
 	const share = useCallback(async () => {
 		if (boardId) {
+			setOpenThread(null);
+			setDraftAt(null);
 			setShareOpen(true);
 			return;
 		}
@@ -923,6 +958,38 @@ export function Editor({
 		else if (session.user) share();
 	}, [session.loading, session.user, share, say]);
 
+	// Arriving from an invite link (?invite=…): join once signed in, then reconnect with the new role
+	const handledInvite = useRef(false);
+	useEffect(() => {
+		if (session.loading || handledInvite.current || !boardId) return;
+		const params = new URLSearchParams(window.location.search);
+		const token = params.get("invite");
+		if (!token) return;
+		if (!session.user) {
+			handledInvite.current = true;
+			setSignIn("invite");
+			return;
+		}
+		handledInvite.current = true;
+		params.delete("invite");
+		window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+		fetch(`/api/boards/${boardId}/join`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token }),
+		})
+			.then(async (res) => {
+				const data = (await res.json().catch(() => null)) as { role?: string; error?: string } | null;
+				if (!res.ok) {
+					say(data?.error ?? "Couldn't join the board. Try the invite link again.");
+					return;
+				}
+				if (data?.role !== "owner") say(data?.role === "edit" ? "You joined the board and can edit it" : "You joined the board and can view it");
+				doc.reconnect();
+			})
+			.catch(() => say("Couldn't reach the server. Check your connection and try again."));
+	}, [session.loading, session.user, boardId, doc, say]);
+
 	/* -------------------------------------------------------------- */
 	/* Render                                                          */
 	/* -------------------------------------------------------------- */
@@ -955,7 +1022,7 @@ export function Editor({
 		? "grabbing"
 		: spaceHeld || tool === "hand"
 			? "grab"
-			: CREATE_TOOLS.has(tool) || tool === "connect"
+			: CREATE_TOOLS.has(tool) || tool === "connect" || tool === "comment"
 				? "crosshair"
 				: "default";
 
@@ -1125,6 +1192,31 @@ export function Editor({
 				</g>
 			</svg>
 
+			{boardId && (
+				<CommentPins
+					threads={threads}
+					vp={vp}
+					openId={openThread}
+					onOpen={(id) => {
+						setDraftAt(null);
+						setOpenThread((o) => (o === id ? null : id));
+					}}
+				/>
+			)}
+			{draftAt && <NewComment at={draftAt} vp={vp} send={doc.sendComment} onDone={() => setDraftAt(null)} />}
+			{activeThread && (
+				<ThreadPopover
+					thread={activeThread}
+					vp={vp}
+					meId={session.user?.id ?? null}
+					isOwner={doc.role === "owner"}
+					canComment={doc.canComment}
+					send={doc.sendComment}
+					onSignIn={() => setSignIn("comment")}
+					onClose={() => setOpenThread(null)}
+				/>
+			)}
+
 			{editing && (
 				<TextEditor
 					key={editing.id}
@@ -1165,15 +1257,67 @@ export function Editor({
 				status={doc.status}
 				presence={doc.presence}
 				sharing={sharing}
-				disabled={!boardId && session.loading}
+				disabled={(!boardId && session.loading) || doc.status === "denied"}
 				onShare={share}
+				viewOnly={Boolean(boardId) && doc.status === "live" && !doc.canEdit}
 			>
+				<button
+					type="button"
+					className="icon-btn bar-icon"
+					aria-label={`Comments${threads.length ? `, ${threads.filter((t) => !t.root.resolved).length} open` : ""}`}
+					aria-pressed={commentsOpen}
+					data-active={commentsOpen || undefined}
+					onClick={() => {
+						setCommentsOpen((o) => !o);
+						setAssistantOpen(false);
+					}}
+				>
+					<Icons.comment />
+					{threads.some((t) => !t.root.resolved) && <span className="bar-badge">{threads.filter((t) => !t.root.resolved).length}</span>}
+				</button>
+				<span className="walkthrough-anchor">
+					<button
+						type="button"
+						className="icon-btn bar-icon"
+						aria-label="Walkthroughs"
+						aria-pressed={walkOpen}
+						data-active={walkOpen || undefined}
+						data-walkthrough-toggle
+						onClick={() => {
+							setWalkOpen((o) => !o);
+							setOpenThread(null);
+							setDraftAt(null);
+						}}
+					>
+						<Icons.video />
+					</button>
+					{walkOpen && (
+						<WalkthroughPanel
+							boardId={boardId}
+							refreshKey={walkRefresh}
+							signedIn={Boolean(session.user)}
+							onRecord={() => {
+								setWalkOpen(false);
+								recorder.start();
+							}}
+							onPlay={(r) => {
+								setWalkOpen(false);
+								setPlaying(r);
+							}}
+							onSignIn={() => setSignIn("record")}
+							onClose={() => setWalkOpen(false)}
+						/>
+					)}
+				</span>
 				<button
 					type="button"
 					className="ghost-btn"
 					aria-pressed={assistantOpen}
 					data-active={assistantOpen || undefined}
-					onClick={() => setAssistantOpen((o) => !o)}
+					onClick={() => {
+						setAssistantOpen((o) => !o);
+						setCommentsOpen(false);
+					}}
 				>
 					<Icons.sparkle />
 					<span className="ghost-label">Assistant</span>
@@ -1188,7 +1332,29 @@ export function Editor({
 				}}
 				templatesOpen={templatesOpen}
 				onTemplates={() => setTemplatesOpen((o) => !o)}
+				readOnly={!doc.canEdit}
 			/>
+			{commentsOpen && (
+				<CommentsPanel
+					threads={threads}
+					openId={openThread}
+					onOpen={(t) => {
+						setDraftAt(null);
+						setOpenThread(t.root.id);
+						// Bring the pin into view, a little left of center so the panel doesn't cover it
+						setVp((v) => ({ ...v, x: size.w * 0.4 - t.root.x * v.zoom, y: size.h / 2 - t.root.y * v.zoom }));
+					}}
+					onStart={() => {
+						if (!boardId) say("Share the board to add comments.");
+						else if (!doc.canComment) setSignIn("comment");
+						else {
+							setTool("comment");
+							say("Click anywhere on the board to place your comment");
+						}
+					}}
+					onClose={() => setCommentsOpen(false)}
+				/>
+			)}
 			{templatesOpen && <TemplatesPanel onInsert={insertTemplate} onClose={() => setTemplatesOpen(false)} />}
 			{helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
 			{assistantOpen && (
@@ -1211,10 +1377,68 @@ export function Editor({
 			)}
 			{shareOpen && boardId && (
 				<ShareDialog
-					link={`${window.location.origin}/board?board=${boardId}`}
+					boardId={boardId}
+					boardName={board.name}
+					session={session}
+					here={doc.people}
 					onClose={() => setShareOpen(false)}
-					onCopied={() => say("Link copied")}
+					say={say}
 				/>
+			)}
+			{recorder.recording && <RecordingBar elapsed={recorder.elapsed} onStop={recorder.stop} />}
+			{take && boardId && (
+				<SaveTakeDialog
+					take={take}
+					boardId={boardId}
+					defaultTitle={`${board.name} walkthrough`}
+					onSaved={() => {
+						setTake(null);
+						setWalkRefresh((n) => n + 1);
+						say("Walkthrough saved to the board");
+					}}
+					onClose={() => setTake(null)}
+				/>
+			)}
+			{playing && (
+				<PlayerDialog
+					recording={playing}
+					onDeleted={() => {
+						setPlaying(null);
+						setWalkRefresh((n) => n + 1);
+						say("Walkthrough deleted");
+					}}
+					onClose={() => setPlaying(null)}
+				/>
+			)}
+			{doc.status === "denied" && (
+				<div className="denied" role="alert">
+					<div className="panel denied-card">
+						<span className="denied-icon" aria-hidden="true">
+							<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+								<rect x="5" y="10.5" width="14" height="9.5" rx="2" />
+								<path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" />
+							</svg>
+						</span>
+						<h1>
+							This board is <em>private.</em>
+						</h1>
+						{doc.denied?.signedIn ? (
+							<p>Your account hasn't been invited to this board. Ask the board's owner for an invite link, then open it here.</p>
+						) : (
+							<p>Only people the owner invited can open it. Sign in with the account you were invited with.</p>
+						)}
+						<div className="denied-actions">
+							{!doc.denied?.signedIn && (
+								<button type="button" className="primary-btn" onClick={() => setSignIn("access")}>
+									Sign in
+								</button>
+							)}
+							<a className="ghost-btn" href="/dashboard">
+								Go to dashboard
+							</a>
+						</div>
+					</div>
+				</div>
 			)}
 
 			<HistoryBar canUndo={doc.canUndo} canRedo={doc.canRedo} onUndo={doc.undo} onRedo={doc.redo} />

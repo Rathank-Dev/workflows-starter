@@ -1,4 +1,5 @@
 import type { Sql } from "./db";
+import { deleteBoardRecordings } from "./recordings";
 
 /** Days between asking to delete an account and it being deleted for good. */
 export const DELETION_GRACE_DAYS = 30;
@@ -7,15 +8,24 @@ export const TRASH_DAYS = 30;
 
 /** Minimal Durable Object access, so this module also runs outside the Worker (tests, scripts). */
 export interface BoardStore {
+	/** Erases the board's content, comments, and walkthrough videos. */
 	deleteBoard(id: string): Promise<void>;
 	disconnectAll(id: string): Promise<void>;
+	/** Deletes stored files (walkthrough videos) by key. */
+	deleteFiles(keys: string[]): Promise<void>;
 }
 
 export function boardStore(env: Env): BoardStore {
 	const stub = (id: string) => env.BOARD.get(env.BOARD.idFromName(id));
 	return {
-		deleteBoard: (id) => stub(id).deleteBoard(),
+		deleteBoard: async (id) => {
+			await stub(id).deleteBoard();
+			await deleteBoardRecordings(env, id);
+		},
 		disconnectAll: (id) => stub(id).disconnectAll(),
+		deleteFiles: async (keys) => {
+			for (let i = 0; i < keys.length; i += 1000) await env.RECORDINGS.delete(keys.slice(i, i + 1000));
+		},
 	};
 }
 
@@ -79,6 +89,9 @@ export async function purgeDue(sql: Sql, store: BoardStore): Promise<{ accounts:
 		const owned = await sql<{ id: string }[]>`select id from boards where owner_id = ${id}`;
 		for (const b of owned) await store.deleteBoard(b.id);
 		boards += owned.length;
+		// Their walkthroughs on other people's boards
+		const recs = await sql<{ id: string; board_id: string }[]>`select id, board_id from recordings where user_id = ${id}`;
+		await store.deleteFiles(recs.map((r) => `recordings/${r.board_id}/${r.id}`));
 		// Cascades to boards, sign-ins, sessions, stars, visits, and usage
 		await sql`delete from users where id = ${id}`;
 	}

@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBoard, type Board } from "../../shared/board";
+import type { BoardComment, CommentOp } from "../../shared/comments";
 import { starterBoard } from "../../shared/templates";
 
-export type SyncStatus = "local" | "connecting" | "live" | "offline" | "deleted";
+export type SyncStatus = "local" | "connecting" | "live" | "offline" | "deleted" | "denied";
+export type BoardRole = "owner" | "edit" | "view";
+export interface Person {
+	id: string;
+	name: string;
+}
 
 const HISTORY_LIMIT = 200;
 const SEND_EVERY_MS = 120;
@@ -29,6 +35,23 @@ export function saveLocal(boardId: string | null, board: Board) {
 	}
 }
 
+function loadRole(boardId: string): BoardRole {
+	try {
+		const r = localStorage.getItem(`linework:role:${boardId}`);
+		return r === "owner" || r === "edit" || r === "view" ? r : "edit";
+	} catch {
+		return "edit";
+	}
+}
+
+function saveRole(boardId: string, role: BoardRole) {
+	try {
+		localStorage.setItem(`linework:role:${boardId}`, role);
+	} catch {
+		// Storage blocked; the server still enforces the role
+	}
+}
+
 /**
  * Owns the board document: undo history, a copy in this browser, and (for
  * shared boards) a live WebSocket to the board's Durable Object.
@@ -43,6 +66,20 @@ export function useBoardDoc(boardId: string | null) {
 	);
 	const [status, setStatus] = useState<SyncStatus>(boardId ? "connecting" : "local");
 	const [presence, setPresence] = useState(1);
+	const [people, setPeople] = useState<Person[]>([]);
+	/**
+	 * Browser-only boards are yours to edit. Shared boards start with the role
+	 * last seen on this device (edit if new), so a template or offline edit made
+	 * before connecting isn't lost; the server confirms the role on connect and
+	 * refuses edits from viewers either way.
+	 */
+	const [role, setRole] = useState<BoardRole>(() => (boardId ? loadRole(boardId) : "owner"));
+	const [canComment, setCanComment] = useState(false);
+	const [denied, setDenied] = useState<{ signedIn: boolean } | null>(null);
+	const [comments, setComments] = useState<Map<string, BoardComment>>(new Map());
+	const [reconnectTick, setReconnectTick] = useState(0);
+	const roleRef = useRef(role);
+	roleRef.current = role;
 	const [error, setError] = useState<string | null>(null);
 	const [history, setHistory] = useState({ canUndo: false, canRedo: false });
 
@@ -94,6 +131,7 @@ export function useBoardDoc(boardId: string | null) {
 
 	const commit = useCallback(
 		(fn: (b: Board) => Board) => {
+			if (roleRef.current === "view") return;
 			const prev = before.current ?? boardRef.current;
 			const next = fn(boardRef.current);
 			if (next === boardRef.current) return;
@@ -106,6 +144,7 @@ export function useBoardDoc(boardId: string | null) {
 
 	const preview = useCallback(
 		(fn: (b: Board) => Board) => {
+			if (roleRef.current === "view") return;
 			before.current ??= boardRef.current;
 			set(fn(boardRef.current));
 		},
@@ -119,6 +158,7 @@ export function useBoardDoc(boardId: string | null) {
 	}, [pushHistory]);
 
 	const undo = useCallback(() => {
+		if (roleRef.current === "view") return;
 		const prev = past.current.pop();
 		if (!prev) return;
 		future.current.push(boardRef.current);
@@ -127,6 +167,7 @@ export function useBoardDoc(boardId: string | null) {
 	}, [set, syncHistory]);
 
 	const redo = useCallback(() => {
+		if (roleRef.current === "view") return;
 		const next = future.current.pop();
 		if (!next) return;
 		past.current.push(boardRef.current);
@@ -153,19 +194,52 @@ export function useBoardDoc(boardId: string | null) {
 				setError(null);
 			};
 			socket.onmessage = (event) => {
-				let msg: { type?: string; doc?: unknown; count?: number; message?: string };
+				let msg: {
+				type?: string;
+				doc?: unknown;
+				count?: number;
+				message?: string;
+				role?: BoardRole;
+				canComment?: boolean;
+				signedIn?: boolean;
+				people?: Person[];
+				items?: BoardComment[];
+				comment?: BoardComment;
+				ids?: string[];
+			};
 				try {
 					msg = JSON.parse(event.data);
 				} catch {
 					return;
 				}
-				if (msg.type === "doc") {
+				if (msg.type === "hello" && msg.role) {
+					setRole(msg.role);
+					saveRole(boardId, msg.role);
+					setCanComment(Boolean(msg.canComment));
+				} else if (msg.type === "denied") {
+					closed = true;
+					setDenied({ signedIn: Boolean(msg.signedIn) });
+					setStatus("denied");
+				} else if (msg.type === "comments" && Array.isArray(msg.items)) {
+					setComments(new Map(msg.items.map((c) => [c.id, c])));
+				} else if (msg.type === "comment" && msg.comment) {
+					const c = msg.comment;
+					setComments((m) => new Map(m).set(c.id, c));
+				} else if (msg.type === "comment:removed" && Array.isArray(msg.ids)) {
+					const ids = msg.ids;
+					setComments((m) => {
+						const next = new Map(m);
+						for (const id of ids) next.delete(id);
+						return next;
+					});
+				} else if (msg.type === "doc") {
 					const doc = msg.doc === null ? null : parseBoard(msg.doc);
 					// Nothing saved yet, or we edited while offline: our copy wins.
 					if (!doc || unsynced.current) flushSend();
 					else if (!before.current) set(doc, true);
 				} else if (msg.type === "presence" && typeof msg.count === "number") {
 					setPresence(Math.max(1, msg.count));
+					setPeople(Array.isArray(msg.people) ? msg.people : []);
 				} else if (msg.type === "deleted") {
 					closed = true;
 					socket.close();
@@ -183,6 +257,11 @@ export function useBoardDoc(boardId: string | null) {
 					setError("This board was deleted by its owner.");
 					return;
 				}
+				// Sharing changed: reconnect now so the new access applies
+				if (event.code === 4001) {
+					retry = setTimeout(connect, 50);
+					return;
+				}
 				setStatus("offline");
 				setPresence(1);
 				attempt += 1;
@@ -190,6 +269,7 @@ export function useBoardDoc(boardId: string | null) {
 			};
 		};
 		// Deferred so React StrictMode's mount/unmount/mount opens one socket, not two.
+		setDenied(null);
 		retry = setTimeout(connect, 0);
 
 		return () => {
@@ -198,7 +278,15 @@ export function useBoardDoc(boardId: string | null) {
 			ws.current?.close();
 			ws.current = null;
 		};
-	}, [boardId, flushSend, set]);
+	}, [boardId, flushSend, set, reconnectTick]);
+
+	/** Sends a comment change. Returns false when not connected. */
+	const sendComment = useCallback((op: CommentOp) => {
+		const socket = ws.current;
+		if (socket?.readyState !== WebSocket.OPEN) return false;
+		socket.send(JSON.stringify(op));
+		return true;
+	}, []);
 
 	// Keep the local copy current when the tab closes mid-debounce
 	useEffect(() => {
@@ -219,6 +307,15 @@ export function useBoardDoc(boardId: string | null) {
 		canRedo: history.canRedo,
 		status,
 		presence,
+		people,
+		role,
+		canEdit: role !== "view",
+		canComment,
+		denied,
+		comments,
+		sendComment,
+		/** Connect again, e.g. after accepting an invite. */
+		reconnect: () => setReconnectTick((t) => t + 1),
 		error,
 		dismissError: () => setError(null),
 	};

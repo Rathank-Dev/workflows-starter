@@ -199,6 +199,17 @@ export const Icons = {
 			<circle cx="12" cy="17" r="0.6" fill="currentColor" />
 		</Icon>
 	),
+	comment: () => (
+		<Icon>
+			<path d="M4.5 5.5h15v10h-9l-4.5 4v-4h-1.5z" />
+		</Icon>
+	),
+	video: () => (
+		<Icon>
+			<rect x="3.5" y="6.5" width="12" height="11" rx="2" />
+			<path d="M15.5 10.5l5-3v9l-5-3" />
+		</Icon>
+	),
 	link: () => (
 		<Icon>
 			<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1" />

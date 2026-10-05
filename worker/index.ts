@@ -12,6 +12,19 @@ import {
 	trashBoard,
 } from "./dashboard";
 import { connect, type Sql } from "./db";
+import { boardAccess } from "./access";
+import { NAME_HEADER, ROLE_HEADER, USER_HEADER } from "./board-do";
+import {
+	MAX_RECORDING_BYTES,
+	RECORDING_PATH,
+	deleteBoardRecordings,
+	deleteRecording,
+	listRecordings,
+	playRecording,
+	uploadRecording,
+} from "./recordings";
+import { getReferral, referralLanding } from "./referrals";
+import { getSharing, joinBoard, resetInvite, updateMember, updateSharing } from "./sharing";
 import { SECURITY_HEADERS, error, json, randomHex, sameOrigin } from "./http";
 
 export { BoardDO } from "./board-do";
@@ -51,7 +64,21 @@ async function limited(limiter: RateLimit | undefined, key: string): Promise<boo
  * - GET    /api/boards       Boards you own (sign-in required)
  * - PATCH  /api/boards/:id   Rename (owner only)
  * - DELETE /api/boards/:id   Delete (owner only)
- * - GET    /ws?board=:id     Live editing; anyone with the link
+ * - GET    /ws?board=:id     Live editing, as owner, member, or whatever the link allows
+ *
+ * Sharing
+ * - GET|PATCH    /api/boards/:id/sharing            Link access, invite link, people
+ * - POST         /api/boards/:id/invite             New invite link (owner)
+ * - POST         /api/boards/:id/join               Accept an invite link
+ * - PATCH|DELETE /api/boards/:id/members/:userId    Change a role, remove someone, or leave
+ *
+ * Walkthroughs (video in R2)
+ * - GET|POST   /api/boards/:id/recordings
+ * - GET|DELETE /api/recordings/:id
+ *
+ * Invite rewards
+ * - GET /r/:code         Referral link; remembers the inviter
+ * - GET /api/referral    Your referral link and count
  *
  * Assistant
  * - POST /api/ai             Sign-in required
@@ -61,7 +88,7 @@ export default {
 		const url = new URL(request.url);
 		const path = url.pathname;
 
-		if (path.startsWith("/api/") || path.startsWith("/auth/") || path === "/ws") {
+		if (path.startsWith("/api/") || path.startsWith("/auth/") || path === "/ws" || path.startsWith("/r/")) {
 			const ip = request.headers.get("CF-Connecting-IP") ?? "local";
 			if (await limited(env.REQUEST_LIMITER, ip)) {
 				return withSecurityHeaders(
@@ -70,6 +97,9 @@ export default {
 			}
 		}
 
+		if (path.startsWith("/r/") && request.method === "GET") {
+			return withSecurityHeaders(referralLanding(path.slice("/r/".length)));
+		}
 		if (path.startsWith("/auth/login/") && request.method === "GET") {
 			return withSecurityHeaders(startLogin(request, env, path.slice("/auth/login/".length)));
 		}
@@ -82,7 +112,9 @@ export default {
 			const declared = request.headers.get("Content-Length");
 			if (request.body !== null && declared === null) return error("Send a Content-Length header.", 411);
 			const length = Number(declared ?? "0");
-			if (!Number.isFinite(length) || length > MAX_BODY_BYTES) return error("Request is too large.", 413);
+			// Walkthrough videos stream straight to storage, so they get a larger cap
+			const cap = request.method === "POST" && RECORDING_PATH.test(path) ? MAX_RECORDING_BYTES : MAX_BODY_BYTES;
+			if (!Number.isFinite(length) || length > cap) return error("Request is too large.", 413);
 		}
 
 		let sql: Sql | null = null;
@@ -134,6 +166,47 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 	if (path === "/api/account" && method === "DELETE") {
 		const user = await currentUser(request, db());
 		return user ? deleteAccount(request, db(), env, user) : error("Sign in first.", 401);
+	}
+
+	if (path === "/api/referral" && method === "GET") {
+		const user = await currentUser(request, db());
+		return user ? getReferral(request, db(), user) : error("Sign in to get your invite link.", 401);
+	}
+
+	// Sharing
+	const sharing = path.match(/^\/api\/boards\/([a-f0-9]{32})\/(sharing|invite|join)$/);
+	if (sharing) {
+		const [, id, verb] = sharing;
+		const user = await currentUser(request, db());
+		if (verb === "sharing" && method === "GET") return getSharing(request, db(), user, id);
+		if (!user) return error("Sign in first.", 401);
+		if (verb === "sharing" && method === "PATCH") return updateSharing(request, db(), env, user, id);
+		if (verb === "invite" && method === "POST") return resetInvite(request, db(), user, id);
+		if (verb === "join" && method === "POST") return joinBoard(request, db(), user, id);
+		return error("Method not allowed", 405);
+	}
+	const member = path.match(/^\/api\/boards\/([a-f0-9]{32})\/members\/([0-9a-f-]{36})$/);
+	if (member && (method === "PATCH" || method === "DELETE")) {
+		const user = await currentUser(request, db());
+		return user ? updateMember(request, db(), env, user, member[1], member[2]) : error("Sign in first.", 401);
+	}
+
+	// Walkthroughs
+	const recs = path.match(RECORDING_PATH);
+	if (recs) {
+		const user = await currentUser(request, db());
+		if (method === "GET") return listRecordings(db(), user, recs[1]);
+		if (method === "POST") {
+			return user ? uploadRecording(request, db(), env, user, recs[1]) : error("Sign in to record a walkthrough.", 401);
+		}
+		return error("Method not allowed", 405);
+	}
+	const rec = path.match(/^\/api\/recordings\/([a-f0-9]{32})$/);
+	if (rec) {
+		const user = await currentUser(request, db());
+		if (method === "GET") return playRecording(request, db(), env, user, rec[1]);
+		if (method === "DELETE") return user ? deleteRecording(db(), env, user, rec[1]) : error("Sign in first.", 401);
+		return error("Method not allowed", 405);
 	}
 
 	// Board actions: /api/boards/:id/star | trash | restore
@@ -227,6 +300,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 			const rows = await db()`delete from boards where id = ${id} and owner_id = ${user.id} returning id`;
 			if (!rows.length) return error("Only the board's owner can delete it.", 403);
 			await env.BOARD.get(env.BOARD.idFromName(id)).deleteBoard();
+			await deleteBoardRecordings(env, id);
 			return json({ ok: true });
 		}
 		return error("Method not allowed", 405);
@@ -248,19 +322,42 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 			return new Response("Expected Upgrade: websocket", { status: 426 });
 		}
 		// Only boards someone signed in to create, and not in the trash, open live.
-		const [row] = await db()`select 1 from boards where id = ${id} and deleted_at is null`;
-		if (!row) return new Response("Board not found", { status: 404 });
+		const visitor = await currentUser(request, db());
+		const access = await boardAccess(db(), id, visitor);
+		if (!access.exists) return new Response("Board not found", { status: 404 });
+		if (!access.role) return deniedSocket(visitor !== null);
 		await db()`update boards set updated_at = now() where id = ${id}`;
 		// Remember it for the signed-in visitor's Recent and "Shared with me"
-		const visitor = await currentUser(request, db());
 		if (visitor) {
 			await db()`
 				insert into board_visits (user_id, board_id) values (${visitor.id}, ${id})
 				on conflict (user_id, board_id) do update set last_opened_at = now()
 			`;
 		}
-		return env.BOARD.get(env.BOARD.idFromName(id)).fetch(request);
+		// Tell the board who this is. Always set (or cleared) here, so a client can't supply its own.
+		const headers = new Headers(request.headers);
+		headers.set(ROLE_HEADER, access.role);
+		if (visitor) {
+			headers.set(USER_HEADER, visitor.id);
+			headers.set(NAME_HEADER, encodeURIComponent(visitor.name));
+		} else {
+			headers.delete(USER_HEADER);
+			headers.delete(NAME_HEADER);
+		}
+		return env.BOARD.get(env.BOARD.idFromName(id)).fetch(new Request(request, { headers }));
 	}
 
 	return error("Not Found", 404);
+}
+
+/**
+ * A browser can't read why a WebSocket upgrade failed, so a refusal is sent as
+ * a socket that says why and closes.
+ */
+function deniedSocket(signedIn: boolean): Response {
+	const [client, server] = Object.values(new WebSocketPair());
+	server.accept();
+	server.send(JSON.stringify({ type: "denied", signedIn }));
+	server.close(4403, "No access");
+	return new Response(null, { status: 101, webSocket: client });
 }

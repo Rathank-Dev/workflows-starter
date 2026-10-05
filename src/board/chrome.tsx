@@ -13,7 +13,7 @@ import {
 } from "../../shared/board";
 import { TEMPLATES, buildTemplate, templateSize, type FlowTemplate } from "../../shared/templates";
 import { Icons, Mark } from "./icons";
-import { TOOLS, type Tool } from "./tools";
+import { TOOLS, VIEW_TOOLS, type Tool } from "./tools";
 import type { SyncStatus } from "./useBoardDoc";
 
 
@@ -60,19 +60,26 @@ export function Toolbar({
 	onTool,
 	templatesOpen,
 	onTemplates,
+	readOnly,
 }: {
 	tool: Tool;
 	onTool: (t: Tool) => void;
 	templatesOpen: boolean;
 	onTemplates: () => void;
+	/** View-only boards get pan, select, and comment. */
+	readOnly?: boolean;
 }) {
 	return (
 		<nav className="panel toolbar" aria-label="Tools">
-			<IconButton label="Templates" active={templatesOpen} onClick={onTemplates}>
-				<Icons.templates />
-			</IconButton>
-			<div className="toolbar-sep" />
-			{TOOLS.map((t) => (
+			{!readOnly && (
+				<>
+					<IconButton label="Templates" active={templatesOpen} onClick={onTemplates}>
+						<Icons.templates />
+					</IconButton>
+					<div className="toolbar-sep" />
+				</>
+			)}
+			{TOOLS.filter((t) => !readOnly || VIEW_TOOLS.has(t.tool)).map((t) => (
 				<IconButton key={t.tool} label={t.label} shortcut={t.key} active={tool === t.tool} onClick={() => onTool(t.tool)}>
 					<t.icon />
 				</IconButton>
@@ -243,8 +250,10 @@ export function ShareBar({
 	sharing,
 	disabled,
 	onShare,
+	viewOnly,
 	children,
 }: {
+	viewOnly?: boolean;
 	status: SyncStatus;
 	presence: number;
 	sharing: boolean;
@@ -261,13 +270,16 @@ export function ShareBar({
 					? "Connecting…"
 					: status === "deleted"
 						? "Board deleted"
-						: "Offline, saving in this browser";
+						: status === "denied"
+							? "No access"
+							: "Offline, saving in this browser";
 	return (
 		<div className="panel share-bar">
 			<span className="sync" data-status={status}>
 				<span className="sync-dot" />
 				{statusText}
 			</span>
+			{viewOnly && <span className="view-only">View only</span>}
 			{status === "live" && presence > 1 && <span className="presence">{presence} people here</span>}
 			{children}
 			<button type="button" className="share-btn" onClick={onShare} disabled={sharing || disabled} aria-label="Share">

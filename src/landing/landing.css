@@ -570,6 +570,102 @@ html:has(.fy) {
 	width: auto;
 }
 
+/* ─── Team: people and the assistant on one board ─ */
+
+.fy-team {
+	display: grid;
+	grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+	gap: clamp(28px, 5vw, 64px);
+	align-items: center;
+	padding-block: 64px;
+	border-top: 1px solid var(--chrome-line);
+}
+
+.fy-team-board {
+	position: relative;
+	display: flex;
+	justify-content: center;
+	height: 420px;
+	padding: 24px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 4px;
+	background-color: var(--chrome);
+	background-image: radial-gradient(var(--grid) 1px, transparent 1px);
+	background-size: 20px 20px;
+}
+
+.fy-team-board > svg {
+	height: 100%;
+	width: auto;
+	max-width: 100%;
+}
+
+/* Live cursors, one color each, as they appear on a shared board */
+.fy-cursor {
+	position: absolute;
+	display: flex;
+	align-items: flex-start;
+	gap: 2px;
+	pointer-events: none;
+}
+
+.fy-cursor svg path {
+	fill: var(--who);
+	stroke: var(--canvas);
+	stroke-width: 1.2;
+}
+
+.fy-cursor span {
+	margin-top: 12px;
+	padding: 2px 8px;
+	border-radius: 3px;
+	background: var(--who);
+	color: var(--on-action);
+	font-size: 12px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.fy-cursor[data-who="a"] {
+	--who: var(--teal);
+	top: 18%;
+	left: 64%;
+}
+
+.fy-cursor[data-who="b"] {
+	--who: var(--decision);
+	top: 52%;
+	left: 22%;
+}
+
+.fy-cursor[data-who="c"] {
+	--who: var(--check);
+	top: 60%;
+	left: 58%;
+}
+
+.fy-comment {
+	position: absolute;
+	right: 16px;
+	bottom: 16px;
+	max-width: 230px;
+	margin: 0;
+	padding: 10px 12px;
+	border: 1px solid var(--chrome-line);
+	border-left: 2px solid var(--decision);
+	border-radius: 4px;
+	background: var(--canvas);
+	box-shadow: var(--shadow);
+	font-size: 13.5px;
+	line-height: 1.45;
+}
+
+.fy-comment strong {
+	display: block;
+	font-weight: 500;
+	color: var(--decision);
+}
+
 /* ─── How it works: a real three-step flow ────── */
 
 .fy-how {
@@ -675,8 +771,13 @@ html:has(.fy) {
 
 @media (max-width: 960px) {
 	.fy-hero,
-	.fy-assistant {
+	.fy-assistant,
+	.fy-team {
 		grid-template-columns: 1fr;
+	}
+
+	.fy-team-board {
+		height: 360px;
 	}
 
 	.fy-meaning-list {
