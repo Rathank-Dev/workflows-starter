@@ -242,14 +242,9 @@ html:has(.fy) {
 	margin-top: 40px;
 }
 
+/* The flow sits straight on the page, like a sheet on a drafting table */
 .hero-board {
-	padding: 18px;
-	border-radius: 4px;
-	background: var(--chrome);
-	border: 1px solid var(--chrome-line);
-	box-shadow: var(--shadow);
-	background-image: radial-gradient(var(--grid) 1px, transparent 1px);
-	background-size: 18px 18px;
+	filter: drop-shadow(0 24px 48px rgb(0 0 0 / 0.55));
 }
 
 .hero-board-svg {
@@ -426,45 +421,148 @@ html:has(.fy) {
 .fy-chat {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
-	padding: 20px;
 	border-radius: 4px;
 	background: var(--chrome);
 	border: 1px solid var(--chrome-line);
+	overflow: hidden;
+}
+
+.fy-chat-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--chrome-line);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+}
+
+.fy-chat-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--teal);
+	opacity: 0.5;
+}
+
+.fy-chat-dot[data-live] {
+	opacity: 1;
+	animation: fy-pulse 1s ease-in-out infinite;
+}
+
+/* Fixed height so the page doesn't jump while the exchange plays */
+.fy-chat-log {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	height: 400px;
+	padding: 18px;
+	overflow: hidden;
 }
 
 .fy-bubble {
 	margin: 0;
 	max-width: 80%;
 	padding: 10px 14px;
-	border-radius: 14px;
+	border-radius: 4px;
 	font-size: 15px;
+	animation: fy-appear 0.2s ease-out;
 }
 
 .fy-bubble-you {
 	align-self: flex-end;
 	background: var(--action);
 	color: var(--on-action);
-	border-bottom-right-radius: 4px;
+	border-bottom-right-radius: 1px;
 }
 
-/* The assistant speaks in check-purple: it is the thing that verifies and draws */
 .fy-bubble-ai {
 	align-self: flex-start;
 	background: #222b37;
 	color: var(--ink);
-	border-bottom-left-radius: 4px;
+	border-bottom-left-radius: 1px;
+}
+
+.fy-caret {
+	display: inline-block;
+	width: 2px;
+	height: 1.05em;
+	margin-left: 2px;
+	vertical-align: -0.15em;
+	background: currentColor;
+	animation: fy-blink 0.9s steps(1) infinite;
+}
+
+.fy-thinking {
+	display: flex;
+	gap: 5px;
+	padding: 14px 16px;
+}
+
+.fy-thinking span {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--ink-soft);
+	animation: fy-pulse 1s ease-in-out infinite;
+}
+
+.fy-thinking span:nth-child(2) {
+	animation-delay: 0.15s;
+}
+
+.fy-thinking span:nth-child(3) {
+	animation-delay: 0.3s;
 }
 
 .fy-chat-result {
+	flex: 1;
+	min-height: 0;
 	display: flex;
 	justify-content: center;
-	height: 220px;
 	margin-top: 6px;
 	padding: 12px;
 	border-radius: 4px;
 	background: var(--canvas);
 	border: 1px dashed var(--teal);
+}
+
+.fy-chat-input {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0 18px 18px;
+	padding: 10px 10px 10px 14px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 4px;
+	color: var(--ink-soft);
+	font-size: 14px;
+}
+
+.fy-chat-send {
+	padding: 6px 12px;
+	background: var(--chrome-line);
+	color: var(--ink-soft);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+}
+
+@keyframes fy-blink {
+	50% {
+		opacity: 0;
+	}
+}
+
+@keyframes fy-pulse {
+	50% {
+		opacity: 0.35;
+	}
 }
 
 .fy-chat-result svg {

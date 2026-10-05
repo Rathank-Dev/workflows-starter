@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TEMPLATES } from "../../shared/templates";
 import { FlowPreview } from "../board/FlowPreview";
 import { Mark } from "../board/icons";
@@ -49,6 +49,124 @@ function HeroBoard() {
 	return (
 		<div className="hero-board" ref={ref}>
 			<FlowPreview template={mfa} className="hero-board-svg" />
+		</div>
+	);
+}
+
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const DEMO_PROMPT = "Draw a sign-in flow with MFA, rate limiting, and an audit log.";
+const DEMO_REPLY = "I drew it with a password check, a second factor, and session setup.";
+
+const STAGES = ["idle", "prompt", "thinking", "reply", "done"] as const;
+type DemoStage = (typeof STAGES)[number];
+
+/**
+ * The assistant example plays like a real exchange when it scrolls into view:
+ * the request types out, the assistant thinks, replies, and the flow draws
+ * itself. Shows the finished exchange when the visitor prefers reduced motion.
+ */
+function AssistantDemo() {
+	const ref = useRef<HTMLDivElement>(null);
+	const [stage, setStage] = useState<DemoStage>(() => (reducedMotion() ? "done" : "idle"));
+	const [typed, setTyped] = useState(0);
+
+	useEffect(() => {
+		const root = ref.current;
+		if (!root || reducedMotion()) return;
+		const timers: number[] = [];
+		const later = (fn: () => void, ms: number) => timers.push(window.setTimeout(fn, ms));
+		const type = (text: string, next: () => void) => {
+			let i = 0;
+			const tick = () => {
+				i += 1;
+				setTyped(i);
+				if (i < text.length) later(tick, 18 + Math.random() * 34);
+				else later(next, 450);
+			};
+			later(tick, 300);
+		};
+		const run = () => {
+			setStage("prompt");
+			setTyped(0);
+			type(DEMO_PROMPT, () => {
+				setStage("thinking");
+				later(() => {
+					setStage("reply");
+					setTyped(0);
+					type(DEMO_REPLY, () => setStage("done"));
+				}, 1300);
+			});
+		};
+		const seen = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting)) {
+					seen.disconnect();
+					run();
+				}
+			},
+			{ threshold: 0.4 },
+		);
+		seen.observe(root);
+		return () => {
+			seen.disconnect();
+			timers.forEach(clearTimeout);
+		};
+	}, []);
+
+	// Once the flow is on screen, draw it in reading order like the hero
+	useEffect(() => {
+		if (stage !== "done") return;
+		const root = ref.current?.querySelector<HTMLDivElement>(".fy-chat-result");
+		if (!root || reducedMotion()) return;
+		const parts = Array.from(root.querySelectorAll<SVGGElement>("g[data-id]"));
+		parts.sort((a, b) => a.getBBox().y - b.getBBox().y);
+		parts.forEach((g, i) => {
+			g.style.animationDelay = `${i * 60}ms`;
+		});
+		root.classList.add("is-drawing");
+	}, [stage]);
+
+	const after = (s: DemoStage) => STAGES.indexOf(stage) > STAGES.indexOf(s);
+	const promptText = stage === "prompt" ? DEMO_PROMPT.slice(0, typed) : DEMO_PROMPT;
+	const replyText = stage === "reply" ? DEMO_REPLY.slice(0, typed) : DEMO_REPLY;
+
+	return (
+		<div className="fy-chat" ref={ref} aria-label={`Example: you ask "${DEMO_PROMPT}" and the assistant replies "${DEMO_REPLY}"`} role="img">
+			<div className="fy-chat-head" aria-hidden="true">
+				<span className="fy-chat-dot" data-live={stage === "thinking" || stage === "reply" || undefined} />
+				Assistant
+			</div>
+			<div className="fy-chat-log" aria-hidden="true">
+				{stage !== "idle" && (
+					<p className="fy-bubble fy-bubble-you">
+						{promptText}
+						{stage === "prompt" && <span className="fy-caret" />}
+					</p>
+				)}
+				{stage === "thinking" && (
+					<p className="fy-bubble fy-bubble-ai fy-thinking">
+						<span />
+						<span />
+						<span />
+					</p>
+				)}
+				{after("thinking") && (
+					<p className="fy-bubble fy-bubble-ai">
+						{replyText}
+						{stage === "reply" && <span className="fy-caret" />}
+					</p>
+				)}
+				{stage === "done" && (
+					<div className="fy-chat-result">
+						<FlowPreview template={TEMPLATES.find((t) => t.id === "login-mfa") ?? TEMPLATES[0]} />
+					</div>
+				)}
+			</div>
+			<div className="fy-chat-input" aria-hidden="true">
+				<span>Describe a flow…</span>
+				<span className="fy-chat-send">Send</span>
+			</div>
 		</div>
 	);
 }
@@ -158,13 +276,7 @@ export function Landing() {
 						</p>
 						<p className="fy-fineprint">Three assistant requests a day on the free plan.</p>
 					</div>
-					<div className="fy-chat" aria-label="Example">
-						<p className="fy-bubble fy-bubble-you">Draw a sign-in flow with MFA, rate limiting, and an audit log.</p>
-						<p className="fy-bubble fy-bubble-ai">I drew it with a password check, a second factor, and session setup.</p>
-						<div className="fy-chat-result">
-							<FlowPreview template={TEMPLATES.find((t) => t.id === "login-mfa") ?? TEMPLATES[0]} />
-						</div>
-					</div>
+					<AssistantDemo />
 				</section>
 
 				<section className="fy-how" aria-labelledby="how-title">
