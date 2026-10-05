@@ -52,3 +52,21 @@ create table if not exists ai_ip_usage (
 	requests integer not null default 0,
 	primary key (ip_key, day)
 );
+
+-- Dashboard: trash (restorable for 30 days), per-person stars and recent visits.
+alter table boards add column if not exists deleted_at timestamptz;
+
+create table if not exists board_visits (
+	user_id uuid not null references users (id) on delete cascade,
+	board_id text not null references boards (id) on delete cascade,
+	last_opened_at timestamptz not null default now(),
+	primary key (user_id, board_id)
+);
+create index if not exists board_visits_user_idx on board_visits (user_id, last_opened_at desc);
+
+create table if not exists board_stars (
+	user_id uuid not null references users (id) on delete cascade,
+	board_id text not null references boards (id) on delete cascade,
+	created_at timestamptz not null default now(),
+	primary key (user_id, board_id)
+);

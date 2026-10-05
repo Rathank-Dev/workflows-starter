@@ -32,7 +32,7 @@ import {
 	type FlowTemplate,
 } from "../../shared/templates";
 import type { Session } from "../session";
-import { AccountButton, BoardsPanel, ShareDialog, SignInDialog, type SignInReason } from "./account";
+import { AccountButton, ShareDialog, SignInDialog, type SignInReason } from "./account";
 import { AssistantPanel, type AssistantContext } from "./AssistantPanel";
 import {
 	BoardMenu,
@@ -140,7 +140,6 @@ export function Editor({
 	const [assistantOpen, setAssistantOpen] = useState(false);
 	const [signIn, setSignIn] = useState<SignInReason | null>(null);
 	const [shareOpen, setShareOpen] = useState(justShared);
-	const [boardsOpen, setBoardsOpen] = useState(false);
 	const [sharing, setSharing] = useState(false);
 	const [toast, setToast] = useState<string | null>(null);
 	const [, setFontsTick] = useState(0);
@@ -1179,7 +1178,7 @@ export function Editor({
 					<Icons.sparkle />
 					<span className="ghost-label">Assistant</span>
 				</button>
-				<AccountButton session={session} onSignIn={() => setSignIn("general")} onBoards={() => setBoardsOpen(true)} />
+				<AccountButton session={session} onSignIn={() => setSignIn("general")} />
 			</ShareBar>
 			<Toolbar
 				tool={tool}
@@ -1217,7 +1216,7 @@ export function Editor({
 					onCopied={() => say("Link copied")}
 				/>
 			)}
-			{boardsOpen && <BoardsPanel currentId={boardId} onClose={() => setBoardsOpen(false)} />}
+
 			<HistoryBar canUndo={doc.canUndo} canRedo={doc.canRedo} onUndo={doc.undo} onRedo={doc.redo} />
 			<ZoomBar
 				zoom={z}
