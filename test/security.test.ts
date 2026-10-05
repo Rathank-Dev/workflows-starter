@@ -45,6 +45,13 @@ describe("Worker security", () => {
 		expect(res.status).toBe(404);
 	});
 
+	it("refuses live connections opened by other sites", async () => {
+		const res = await SELF.fetch(`${ORIGIN}/ws?board=${"b".repeat(32)}`, {
+			headers: { Upgrade: "websocket", Origin: "https://evil.example", "CF-Connecting-IP": "10.0.0.5" },
+		});
+		expect(res.status).toBe(403);
+	});
+
 	it("rate-limits one IP address", async () => {
 		const statuses: number[] = [];
 		for (let i = 0; i < 130; i++) {

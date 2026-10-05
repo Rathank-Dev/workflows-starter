@@ -143,7 +143,10 @@ export function BoardMenu({
 	onImportJson,
 	onNewBoard,
 	shared,
+	readOnly,
 }: {
+	/** View-only: no renaming or opening files into this board. */
+	readOnly?: boolean;
 	shared: boolean;
 	name: string;
 	onRename: (name: string) => void;
@@ -191,6 +194,7 @@ export function BoardMenu({
 				className="board-name"
 				value={shown}
 				aria-label="Board name"
+				readOnly={readOnly}
 				maxLength={120}
 				size={Math.max(8, shown.length)}
 				onFocus={() => {
@@ -215,16 +219,18 @@ export function BoardMenu({
 					{item("Export as PNG", onExportPng)}
 					{item("Export as SVG", onExportSvg)}
 					{item("Download board file (.json)", onExportJson)}
-					<button
-						type="button"
-						role="menuitem"
-						onClick={() => {
-							setOpen(false);
-							fileRef.current?.click();
-						}}
-					>
-						Open board file…
-					</button>
+					{!readOnly && (
+						<button
+							type="button"
+							role="menuitem"
+							onClick={() => {
+								setOpen(false);
+								fileRef.current?.click();
+							}}
+						>
+							Open board file…
+						</button>
+					)}
 					<div className="menu-sep" />
 					{item(shared ? "Back to my browser board" : "New blank board", onNewBoard)}
 				</div>

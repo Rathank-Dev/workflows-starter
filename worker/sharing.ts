@@ -29,7 +29,10 @@ export async function getSharing(request: Request, sql: Sql, user: User | null, 
 	const [board] = await sql<{ invite_token: string | null; invite_role: "edit" | "view" }[]>`
 		select invite_token, invite_role from boards where id = ${id}
 	`;
-	const people = await sql<{ id: string; name: string; avatar_url: string | null; role: string }[]>`
+	// Who's on the board is for the owner and members, not everyone who has the link
+	const people = !access.isMember
+		? []
+		: await sql<{ id: string; name: string; avatar_url: string | null; role: string }[]>`
 		select u.id, u.name, u.avatar_url, 'owner' as role, 0 as sort, b.created_at as added_at
 		from boards b join users u on u.id = b.owner_id where b.id = ${id}
 		union all

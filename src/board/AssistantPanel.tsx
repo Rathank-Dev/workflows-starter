@@ -30,7 +30,10 @@ export function AssistantPanel({
 	showFrame,
 	onSignIn,
 	onClose,
+	readOnly,
 }: {
+	/** View-only boards: the assistant can't draw here, so don't spend a use. */
+	readOnly?: boolean;
 	session: Session;
 	context: AssistantContext;
 	/** Puts the flow on the board and returns the frame it lives in */
@@ -72,7 +75,7 @@ export function AssistantPanel({
 
 	const send = async (text: string) => {
 		const content = text.trim();
-		if (!content || busy || outOfUses) return;
+		if (!content || busy || outOfUses || readOnly) return;
 		const ctx = context;
 		const history = [...messages, { role: "user" as const, content }];
 		setMessages(history);
@@ -116,7 +119,13 @@ export function AssistantPanel({
 		: ["Draw a password reset flow", "Map a file upload pipeline with malware scanning", "Draw a JWT refresh token rotation flow"];
 
 	let body;
-	if (!session.user) {
+	if (readOnly) {
+		body = (
+			<div className="assistant-empty">
+				<p>You can view this board but not edit it, so the assistant can't draw here. Ask the owner for edit access.</p>
+			</div>
+		);
+	} else if (!session.user) {
 		body = (
 			<div className="assistant-empty">
 				<p>Sign in to use the assistant. It can draw new flows and change the one you select.</p>

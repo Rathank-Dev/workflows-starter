@@ -882,7 +882,8 @@ export function Editor({
 	};
 	const rename = (name: string) => {
 		doc.commit((b) => ({ ...b, name }));
-		if (boardId && session.user) {
+		// The server decides who may rename; don't wait for the session to load
+		if (boardId && doc.canEdit) {
 			fetch(`/api/boards/${boardId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
@@ -1252,6 +1253,7 @@ export function Editor({
 				onImportJson={importJson}
 				onNewBoard={newBoard}
 				shared={Boolean(boardId)}
+				readOnly={!doc.canEdit}
 			/>
 			<ShareBar
 				status={doc.status}
@@ -1365,6 +1367,7 @@ export function Editor({
 					showFrame={showFrame}
 					onSignIn={() => setSignIn("assistant")}
 					onClose={() => setAssistantOpen(false)}
+					readOnly={!doc.canEdit}
 				/>
 			)}
 			{signIn && (
