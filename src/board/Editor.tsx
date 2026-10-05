@@ -55,6 +55,14 @@ import { EdgeMarkers, Scene } from "./Scene";
 import { BOARD_FONT, LINE_HEIGHT, clearTextCache, lineHeightPx, textBoxFor, wrapText } from "./text";
 import { saveLocal, useBoardDoc } from "./useBoardDoc";
 
+/** Messages for /board?signin_error=<code>. Unknown codes get the generic one. */
+const SIGNIN_ERRORS: Record<string, string> = {
+	unavailable: "That sign-in method isn't set up.",
+	expired: "Sign-in took too long. Try again.",
+	cancelled: "Sign-in was cancelled or expired. Try again.",
+	failed: "Couldn't finish signing in. Try again.",
+};
+
 interface Viewport {
 	x: number;
 	y: number;
@@ -912,7 +920,7 @@ export function Editor({
 		params.delete("share");
 		const rest = params.toString();
 		window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
-		if (err) say(err.slice(0, 160));
+		if (err) say(SIGNIN_ERRORS[err] ?? SIGNIN_ERRORS.failed);
 		else if (session.user) share();
 	}, [session.loading, session.user, share, say]);
 

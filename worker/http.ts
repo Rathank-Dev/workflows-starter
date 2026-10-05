@@ -1,9 +1,18 @@
+/** Headers on every Worker response: API data is per-user and never cached. */
+export const SECURITY_HEADERS: Record<string, string> = {
+	"Cache-Control": "no-store",
+	"X-Content-Type-Options": "nosniff",
+	"Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 export function json(data: unknown, status = 200, headers?: HeadersInit): Response {
-	return Response.json(data, { status, headers });
+	const h = new Headers(SECURITY_HEADERS);
+	new Headers(headers).forEach((v, k) => h.set(k, v));
+	return Response.json(data, { status, headers: h });
 }
 
-export function error(message: string, status: number): Response {
-	return json({ error: message }, status);
+export function error(message: string, status: number, headers?: HeadersInit): Response {
+	return json({ error: message }, status, headers);
 }
 
 export function getCookie(request: Request, name: string): string | null {

@@ -32,6 +32,16 @@
 		}
 	],
 	/**
+	 * Rate limits (Workers Rate Limiting). period must be 10 or 60 seconds.
+	 * REQUEST_LIMITER: per IP address, for /api and /auth.
+	 * AI_LIMITER: per signed-in user, a burst cap on the assistant on top of
+	 * its daily limit.
+	 */
+	"ratelimits": [
+		{ "name": "REQUEST_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
+		{ "name": "AI_LIMITER", "namespace_id": "1002", "simple": { "limit": 8, "period": 60 } }
+	],
+	/**
 	 * Workers AI: models that run on Cloudflare, no API key. Billed to your
 	 * Cloudflare account (with a free daily allowance). Local dev calls the real
 	 * service, so run `npx wrangler login` once to use it from `npm run dev`.

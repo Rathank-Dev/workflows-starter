@@ -10,8 +10,27 @@ import { MAX_DOC_BYTES, parseBoard, type Board } from "../shared/board";
  *
  * Conflicts resolve as last write wins for the whole document.
  */
+/** Per-connection write budget: a steady 10 saves a second, bursts up to 30. */
+const WRITE_RATE = 10;
+const WRITE_BURST = 30;
+/** Open sockets allowed per board; each save is re-sent to all of them. */
+export const MAX_CONNECTIONS = 50;
+
 export class BoardDO extends DurableObject<Env> {
 	private sql: SqlStorage;
+	/** Token buckets per socket. In memory only: hibernation resets them, which is fine. */
+	private buckets = new WeakMap<WebSocket, { tokens: number; at: number }>();
+
+	private allowWrite(ws: WebSocket): boolean {
+		const now = Date.now();
+		const b = this.buckets.get(ws) ?? { tokens: WRITE_BURST, at: now };
+		b.tokens = Math.min(WRITE_BURST, b.tokens + ((now - b.at) / 1000) * WRITE_RATE);
+		b.at = now;
+		const ok = b.tokens >= 1;
+		if (ok) b.tokens -= 1;
+		this.buckets.set(ws, b);
+		return ok;
+	}
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -28,6 +47,9 @@ export class BoardDO extends DurableObject<Env> {
 	async fetch(request: Request): Promise<Response> {
 		if (request.headers.get("Upgrade") !== "websocket") {
 			return new Response("Expected WebSocket", { status: 426 });
+		}
+		if (this.ctx.getWebSockets().length >= MAX_CONNECTIONS) {
+			return new Response("This board has too many open connections.", { status: 429 });
 		}
 		const pair = new WebSocketPair();
 		const [client, server] = Object.values(pair);
@@ -88,6 +110,10 @@ export class BoardDO extends DurableObject<Env> {
 		}
 		if (typeof data !== "object" || data === null || (data as { type?: unknown }).type !== "update") return;
 
+		if (!this.allowWrite(ws)) {
+			ws.send(JSON.stringify({ type: "error", message: "Edits are arriving too fast. Some were skipped; keep going and they'll catch up." }));
+			return;
+		}
 		const doc = (data as { doc?: unknown }).doc;
 		const rev = await this.saveBoard(doc);
 		if (rev === null) {
@@ -107,7 +133,13 @@ export class BoardDO extends DurableObject<Env> {
 	}
 
 	async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
-		ws.close(code, reason);
+		// 1005/1006/1015 describe how a socket closed and may not be sent back
+		const sendable = code >= 1000 && code < 5000 && ![1004, 1005, 1006, 1015].includes(code) ? code : 1000;
+		try {
+			ws.close(sendable, reason);
+		} catch {
+			// Already closed
+		}
 		this.broadcastPresence(ws);
 	}
 

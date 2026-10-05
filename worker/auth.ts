@@ -5,8 +5,10 @@ import { error, getCookie, randomToken, safeReturnTo, setCookie, sha256Hex } fro
 export type Provider = "github" | "google" | "discord";
 const PROVIDERS: Provider[] = ["github", "google", "discord"];
 
-const SESSION_COOKIE = "lw_session";
-const STATE_COOKIE = "lw_oauth";
+// __Host- cookies must be Secure, Path=/, and carry no Domain, so a sibling
+// subdomain can't plant or overwrite them.
+const SESSION_COOKIE = "__Host-lw_session";
+const STATE_COOKIE = "__Host-lw_oauth";
 const SESSION_DAYS = 30;
 
 /** Providers whose client id and secret are both set. */
@@ -61,7 +63,6 @@ export function startLogin(request: Request, env: Env, providerName: string): Re
 
 	const cookie = setCookie(STATE_COOKIE, JSON.stringify({ p: provider, s: state, v: verifier, r: returnTo }), {
 		maxAge: 600,
-		path: "/auth",
 	});
 	return new Response(null, { status: 302, headers: { Location: authUrl.toString(), "Set-Cookie": cookie } });
 }
@@ -132,24 +133,26 @@ async function fetchProfile(provider: Provider, env: Env, origin: string, code: 
 export async function finishLogin(request: Request, env: Env, sql: Sql, providerName: string): Promise<Response> {
 	const url = new URL(request.url);
 	const provider = asProvider(providerName, env);
-	const clearState = setCookie(STATE_COOKIE, "", { maxAge: 0, path: "/auth" });
-	const fail = (reason: string) =>
+	const clearState = setCookie(STATE_COOKIE, "", { maxAge: 0 });
+	// Only a fixed code goes in the URL; the client maps it to a message, so a
+	// crafted link can't put arbitrary text on the page.
+	const fail = (code: "unavailable" | "expired" | "cancelled" | "failed") =>
 		new Response(null, {
 			status: 302,
-			headers: { Location: `/board?signin_error=${encodeURIComponent(reason)}`, "Set-Cookie": clearState },
+			headers: { Location: `/board?signin_error=${code}`, "Set-Cookie": clearState },
 		});
 
-	if (!provider) return fail("That sign-in method isn't set up.");
+	if (!provider) return fail("unavailable");
 	let saved: { p: string; s: string; v: string; r: string };
 	try {
 		saved = JSON.parse(getCookie(request, STATE_COOKIE) ?? "");
 	} catch {
-		return fail("Sign-in took too long. Try again.");
+		return fail("expired");
 	}
 	const code = url.searchParams.get("code");
 	const state = url.searchParams.get("state");
 	if (!code || !state || saved.p !== provider || saved.s !== state) {
-		return fail("Sign-in was cancelled or expired. Try again.");
+		return fail("cancelled");
 	}
 
 	let profile: Profile;
@@ -157,7 +160,7 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 		profile = await fetchProfile(provider, env, url.origin, code, saved.v);
 	} catch (err) {
 		console.error("OAuth callback failed", provider, err);
-		return fail("Couldn't finish signing in. Try again.");
+		return fail("failed");
 	}
 
 	const user = await upsertUser(sql, provider, profile);
