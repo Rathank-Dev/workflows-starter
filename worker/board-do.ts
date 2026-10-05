@@ -16,6 +16,10 @@ export class BoardDO extends DurableObject<Env> {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		this.sql = ctx.storage.sql;
+		this.ensureTable();
+	}
+
+	private ensureTable(): void {
 		this.sql.exec(
 			"CREATE TABLE IF NOT EXISTS board (id INTEGER PRIMARY KEY CHECK (id = 1), doc TEXT NOT NULL, rev INTEGER NOT NULL)",
 		);
@@ -54,6 +58,21 @@ export class BoardDO extends DurableObject<Env> {
 			rev,
 		);
 		return rev;
+	}
+
+	/** Erases the board and disconnects everyone viewing it. */
+	async deleteBoard(): Promise<void> {
+		for (const socket of this.ctx.getWebSockets()) {
+			try {
+				// Say so explicitly too: proxies don't always pass close codes through.
+				socket.send(JSON.stringify({ type: "deleted" }));
+				socket.close(4404, "Board deleted");
+			} catch {
+				// Already closed
+			}
+		}
+		await this.ctx.storage.deleteAll();
+		this.ensureTable();
 	}
 
 	async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {

@@ -135,7 +135,9 @@ export function BoardMenu({
 	onExportJson,
 	onImportJson,
 	onNewBoard,
+	shared,
 }: {
+	shared: boolean;
 	name: string;
 	onRename: (name: string) => void;
 	onExportPng: () => void;
@@ -176,7 +178,7 @@ export function BoardMenu({
 	return (
 		<div className="panel board-bar" ref={menuRef}>
 			<Mark />
-			<span className="brand">Linework</span>
+			<a className="brand" href="/">Flowyard</a>
 			<div className="board-bar-sep" />
 			<input
 				className="board-name"
@@ -217,7 +219,7 @@ export function BoardMenu({
 						Open board file…
 					</button>
 					<div className="menu-sep" />
-					{item("New blank board", onNewBoard)}
+					{item(shared ? "Back to my browser board" : "New blank board", onNewBoard)}
 				</div>
 			)}
 			<input
@@ -235,9 +237,31 @@ export function BoardMenu({
 	);
 }
 
-export function ShareBar({ status, presence, onShare }: { status: SyncStatus; presence: number; onShare: () => void }) {
+export function ShareBar({
+	status,
+	presence,
+	sharing,
+	disabled,
+	onShare,
+	children,
+}: {
+	status: SyncStatus;
+	presence: number;
+	sharing: boolean;
+	disabled?: boolean;
+	onShare: () => void;
+	children?: ReactNode;
+}) {
 	const statusText =
-		status === "live" ? "Saved" : status === "connecting" ? "Connecting…" : "Offline, saving in this browser";
+		status === "local"
+			? "Saved in this browser"
+			: status === "live"
+				? "Saved"
+				: status === "connecting"
+					? "Connecting…"
+					: status === "deleted"
+						? "Board deleted"
+						: "Offline, saving in this browser";
 	return (
 		<div className="panel share-bar">
 			<span className="sync" data-status={status}>
@@ -245,9 +269,10 @@ export function ShareBar({ status, presence, onShare }: { status: SyncStatus; pr
 				{statusText}
 			</span>
 			{status === "live" && presence > 1 && <span className="presence">{presence} people here</span>}
-			<button type="button" className="share-btn" onClick={onShare} aria-label="Copy link">
+			{children}
+			<button type="button" className="share-btn" onClick={onShare} disabled={sharing || disabled} aria-label="Share">
 				<Icons.link />
-				<span className="share-label">Copy link</span>
+				<span className="share-label">{sharing ? "Sharing…" : "Share"}</span>
 			</button>
 		</div>
 	);

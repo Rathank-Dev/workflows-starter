@@ -312,3 +312,157 @@ export function starterBoard(): Board {
 	elements.sort((a, b) => Number(b.type === "frame") - Number(a.type === "frame"));
 	return { v: 1, name: "Security architecture", elements };
 }
+
+/* ------------------------------------------------------------------ */
+/* Flow specs: the JSON shape the AI assistant reads and writes        */
+/* ------------------------------------------------------------------ */
+
+export interface FlowSpecNode {
+	k: string;
+	t: string;
+	col: number;
+	row: number;
+	c: ColorKey;
+	s: ShapeKind;
+}
+
+export interface FlowSpecEdge {
+	from: string;
+	to: string;
+	label: string;
+	dashed: boolean;
+	route: EdgeEl["route"];
+}
+
+export interface FlowSpec {
+	title: string;
+	subtitle: string;
+	cols: number;
+	rows: number;
+	nodes: FlowSpecNode[];
+	edges: FlowSpecEdge[];
+}
+
+export const FLOW_LIMITS = { cols: 6, rows: 18, nodes: 48, edges: 96, text: 120 };
+
+const COLOR_SET = new Set<string>(["white", "grey", "red", "orange", "yellow", "green", "blue", "purple"]);
+const SHAPE_SET = new Set<string>(["rect", "pill", "diamond", "cylinder", "note"]);
+const ROUTE_SET = new Set<string>(["elbow", "corner", "straight"]);
+
+/**
+ * Checks an untrusted flow spec (from the model or the client). Returns a
+ * clean copy, or a message saying what's wrong.
+ */
+export function validateFlowSpec(input: unknown): { spec: FlowSpec } | { error: string } {
+	const L = FLOW_LIMITS;
+	if (typeof input !== "object" || input === null) return { error: "Flow is not an object." };
+	const f = input as Record<string, unknown>;
+	const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+	const int = (v: unknown, min: number, max: number) =>
+		typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : min;
+
+	const cols = int(f.cols, 1, L.cols);
+	const rows = int(f.rows, 1, L.rows);
+	if (!Array.isArray(f.nodes) || f.nodes.length === 0) return { error: "Flow has no steps." };
+	if (f.nodes.length > L.nodes) return { error: `Flow has more than ${L.nodes} steps.` };
+	if (!Array.isArray(f.edges) || f.edges.length > L.edges) return { error: "Flow has too many connections." };
+
+	const keys = new Set<string>();
+	const cells = new Set<string>();
+	const nodes: FlowSpecNode[] = [];
+	for (const raw of f.nodes as Record<string, unknown>[]) {
+		const k = str(raw?.k, 40);
+		if (!k || keys.has(k)) return { error: "Every step needs a unique key." };
+		keys.add(k);
+		// Snap to half cells and keep inside the grid
+		const col = Math.min(cols - 1, Math.max(0, Math.round(Number(raw.col) * 2) / 2 || 0));
+		const row = Math.min(rows - 1, Math.max(0, Math.round(Number(raw.row) * 2) / 2 || 0));
+		const cell = `${col}:${row}`;
+		if (cells.has(cell)) return { error: "Two steps share the same spot on the grid." };
+		cells.add(cell);
+		nodes.push({
+			k,
+			t: str(raw.t, L.text),
+			col,
+			row,
+			c: (COLOR_SET.has(raw.c as string) ? raw.c : "white") as ColorKey,
+			s: (SHAPE_SET.has(raw.s as string) ? raw.s : "rect") as ShapeKind,
+		});
+	}
+
+	const edges: FlowSpecEdge[] = [];
+	for (const raw of f.edges as Record<string, unknown>[]) {
+		const from = str(raw?.from, 40);
+		const to = str(raw?.to, 40);
+		if (!keys.has(from) || !keys.has(to) || from === to) continue;
+		edges.push({
+			from,
+			to,
+			label: str(raw.label, 40),
+			dashed: raw.dashed === true,
+			route: (ROUTE_SET.has(raw.route as string) ? raw.route : "elbow") as EdgeEl["route"],
+		});
+	}
+
+	return {
+		spec: {
+			title: str(f.title, 120) || "Untitled flow",
+			subtitle: str(f.subtitle, 200),
+			cols,
+			rows,
+			nodes,
+			edges,
+		},
+	};
+}
+
+export function specToTemplate(spec: FlowSpec): FlowTemplate {
+	return {
+		id: "ai",
+		title: spec.title,
+		subtitle: spec.subtitle,
+		cols: spec.cols,
+		rows: spec.rows,
+		nodes: spec.nodes.map((n) => ({ k: n.k, t: n.t, col: n.col, row: n.row, c: n.c, s: n.s })),
+		edges: spec.edges.map((e) => [e.from, e.to, e.label, e.dashed, e.route]),
+	};
+}
+
+/**
+ * Describes a frame and the shapes inside it as a flow spec, so the
+ * assistant can edit it. Shape ids become step keys.
+ */
+export function frameToSpec(board: Board, frameId: string): FlowSpec | null {
+	const frame = board.elements.find((e) => e.id === frameId);
+	if (!frame || frame.type !== "frame") return null;
+	const inside = board.elements.filter(
+		(e): e is ShapeEl =>
+			e.type === "shape" &&
+			e.x >= frame.x &&
+			e.y >= frame.y &&
+			e.x + e.w <= frame.x + frame.w &&
+			e.y + e.h <= frame.y + frame.h,
+	);
+	const ids = new Set(inside.map((n) => n.id));
+	const toCell = (center: number, origin: number, size: number) =>
+		Math.max(0, Math.round(((center - origin) / size - 0.5) * 2) / 2);
+	const nodes = inside.map((n) => ({
+		k: n.id,
+		t: n.text,
+		col: toCell(n.x + n.w / 2, frame.x + PAD_X, COL_W),
+		row: toCell(n.y + n.h / 2, frame.y + PAD_TOP, ROW_H),
+		c: n.color,
+		s: n.shape,
+	}));
+	const edges = board.elements
+		.filter((e): e is EdgeEl => e.type === "edge" && ids.has(e.from) && ids.has(e.to))
+		.map((e) => ({ from: e.from, to: e.to, label: e.label, dashed: e.dashed, route: e.route }));
+	return {
+		title: frame.title,
+		subtitle: frame.subtitle,
+		cols: Math.max(1, Math.ceil((frame.w - PAD_X * 2) / COL_W)),
+		rows: Math.max(1, Math.ceil((frame.h - PAD_TOP - PAD_BOTTOM) / ROW_H)),
+		nodes,
+		edges,
+	};
+}

@@ -17,8 +17,12 @@
 		"docs_url": "https://developers.cloudflare.com/workflows/"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.131.0",
+		"arctic": "^3.7.0",
+		"postgres": "^3.4.9",
 		"react": "19.2.1",
-		"react-dom": "19.2.1"
+		"react-dom": "19.2.1",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "1.52.1",
@@ -47,10 +51,11 @@
 		"cf-typegen": "wrangler types",
 		"check": "tsc && wrangler deploy --dry-run",
 		"deploy": "npm run build && wrangler deploy",
-		"dev": "vite",
+		"dev": "node scripts/dev.mjs",
 		"lint": "eslint .",
-		"preview": "npm run build && vite preview",
-		"test": "vitest run"
+		"preview": "npm run build && node scripts/dev.mjs preview",
+		"test": "vitest run",
+		"db:migrate": "node scripts/migrate.mjs"
 	},
 	"type": "module"
 }

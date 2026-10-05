@@ -186,6 +186,12 @@ export const Icons = {
 			<path d="M4 19L20 5" />
 		</Icon>
 	),
+	sparkle: () => (
+		<Icon>
+			<path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z" />
+			<path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+		</Icon>
+	),
 	help: () => (
 		<Icon>
 			<circle cx="12" cy="12" r="8.5" />

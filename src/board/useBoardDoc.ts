@@ -2,16 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBoard, type Board } from "../../shared/board";
 import { starterBoard } from "../../shared/templates";
 
-export type SyncStatus = "connecting" | "live" | "offline";
+export type SyncStatus = "local" | "connecting" | "live" | "offline" | "deleted";
 
 const HISTORY_LIMIT = 200;
 const SEND_EVERY_MS = 120;
 
-function localKey(boardId: string) {
-	return `linework:board:${boardId}`;
+/** null is the browser-only board you get without signing in. */
+function localKey(boardId: string | null) {
+	return boardId ? `linework:board:${boardId}` : "linework:local";
 }
 
-function loadLocal(boardId: string): Board | null {
+function loadLocal(boardId: string | null): Board | null {
 	try {
 		const raw = localStorage.getItem(localKey(boardId));
 		return raw ? parseBoard(JSON.parse(raw)) : null;
@@ -20,7 +21,7 @@ function loadLocal(boardId: string): Board | null {
 	}
 }
 
-function saveLocal(boardId: string, board: Board) {
+export function saveLocal(boardId: string | null, board: Board) {
 	try {
 		localStorage.setItem(localKey(boardId), JSON.stringify(board));
 	} catch {
@@ -29,18 +30,18 @@ function saveLocal(boardId: string, board: Board) {
 }
 
 /**
- * Owns the board document: undo history, a local copy in this browser, and a
- * live WebSocket to the board's Durable Object.
+ * Owns the board document: undo history, a copy in this browser, and (for
+ * shared boards) a live WebSocket to the board's Durable Object.
  *
  * - `commit(fn)` makes one undoable change.
  * - `preview(fn)` changes the board without history (use while dragging),
  *   then `settle()` records everything since the first preview as one step.
  */
-export function useBoardDoc(boardId: string) {
+export function useBoardDoc(boardId: string | null) {
 	const [board, setBoard] = useState<Board>(
-		() => loadLocal(boardId) ?? (boardId === "main" ? starterBoard() : { v: 1, name: "Untitled board", elements: [] }),
+		() => loadLocal(boardId) ?? (boardId ? { v: 1, name: "Untitled board", elements: [] } : starterBoard()),
 	);
-	const [status, setStatus] = useState<SyncStatus>("connecting");
+	const [status, setStatus] = useState<SyncStatus>(boardId ? "connecting" : "local");
 	const [presence, setPresence] = useState(1);
 	const [error, setError] = useState<string | null>(null);
 	const [history, setHistory] = useState({ canUndo: false, canRedo: false });
@@ -69,7 +70,7 @@ export function useBoardDoc(boardId: string) {
 			setBoard(next);
 			if (saveTimer.current) clearTimeout(saveTimer.current);
 			saveTimer.current = setTimeout(() => saveLocal(boardId, boardRef.current), 300);
-			if (fromServer) return;
+			if (fromServer || !boardId) return;
 			unsynced.current = true;
 			sendTimer.current ??= setTimeout(flushSend, SEND_EVERY_MS);
 		},
@@ -133,8 +134,9 @@ export function useBoardDoc(boardId: string) {
 		set(next);
 	}, [set, syncHistory]);
 
-	// Live connection with reconnect
+	// Live connection with reconnect (shared boards only)
 	useEffect(() => {
+		if (!boardId) return;
 		let closed = false;
 		let attempt = 0;
 		let retry: ReturnType<typeof setTimeout> | null = null;
@@ -164,13 +166,23 @@ export function useBoardDoc(boardId: string) {
 					else if (!before.current) set(doc, true);
 				} else if (msg.type === "presence" && typeof msg.count === "number") {
 					setPresence(Math.max(1, msg.count));
+				} else if (msg.type === "deleted") {
+					closed = true;
+					socket.close();
+					setStatus("deleted");
+					setError("This board was deleted by its owner.");
 				} else if (msg.type === "error" && typeof msg.message === "string") {
 					setError(msg.message);
 				}
 			};
-			socket.onclose = () => {
+			socket.onclose = (event) => {
 				if (ws.current === socket) ws.current = null;
 				if (closed) return;
+				if (event.code === 4404) {
+					setStatus("deleted");
+					setError("This board was deleted by its owner.");
+					return;
+				}
 				setStatus("offline");
 				setPresence(1);
 				attempt += 1;

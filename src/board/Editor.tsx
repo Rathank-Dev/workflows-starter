@@ -22,7 +22,18 @@ import {
 	type ShapeKind,
 	type TextEl,
 } from "../../shared/board";
-import { buildTemplate, templateSize, type FlowTemplate } from "../../shared/templates";
+import {
+	TEMPLATES,
+	buildTemplate,
+	frameToSpec,
+	specToTemplate,
+	templateSize,
+	type FlowSpec,
+	type FlowTemplate,
+} from "../../shared/templates";
+import type { Session } from "../session";
+import { AccountButton, BoardsPanel, ShareDialog, SignInDialog, type SignInReason } from "./account";
+import { AssistantPanel, type AssistantContext } from "./AssistantPanel";
 import {
 	BoardMenu,
 	ContextBar,
@@ -36,12 +47,13 @@ import {
 	ZoomBar,
 	type ContextActions,
 } from "./chrome";
+import { Icons } from "./icons";
 import { TOOL_KEYS, type Tool } from "./tools";
 import { boardToPng, boardToSvg, download, fileSafe } from "./exporting";
 import { addElements, cloneElements, collectForCopy, deleteElements, frameChildren, patchElements, reorder } from "./ops";
 import { EdgeMarkers, Scene } from "./Scene";
 import { BOARD_FONT, LINE_HEIGHT, clearTextCache, lineHeightPx, textBoxFor, wrapText } from "./text";
-import { useBoardDoc } from "./useBoardDoc";
+import { saveLocal, useBoardDoc } from "./useBoardDoc";
 
 interface Viewport {
 	x: number;
@@ -81,7 +93,18 @@ function fitTextHeight(el: TextEl): number {
 	return Math.ceil(wrapText(el.text || " ", el.w, el.textSize, el.bold).length * lineHeightPx(el.textSize)) + 4;
 }
 
-export function Editor({ boardId }: { boardId: string }) {
+export function Editor({
+	boardId,
+	session,
+	onShared,
+	justShared,
+}: {
+	/** null: the browser-only board */
+	boardId: string | null;
+	session: Session;
+	onShared: (id: string) => void;
+	justShared: boolean;
+}) {
 	const doc = useBoardDoc(boardId);
 	const { board, boardRef } = doc;
 
@@ -106,6 +129,11 @@ export function Editor({ boardId }: { boardId: string }) {
 	const [dragging, setDragging] = useState(false);
 	const [templatesOpen, setTemplatesOpen] = useState(false);
 	const [helpOpen, setHelpOpen] = useState(false);
+	const [assistantOpen, setAssistantOpen] = useState(false);
+	const [signIn, setSignIn] = useState<SignInReason | null>(null);
+	const [shareOpen, setShareOpen] = useState(justShared);
+	const [boardsOpen, setBoardsOpen] = useState(false);
+	const [sharing, setSharing] = useState(false);
 	const [toast, setToast] = useState<string | null>(null);
 	const [, setFontsTick] = useState(0);
 
@@ -304,8 +332,9 @@ export function Editor({ boardId }: { boardId: string }) {
 		route: "elbow",
 	});
 
-	const insertTemplate = useCallback(
-		(t: FlowTemplate) => {
+	/** Places a flow in free space near the middle of the view. Returns its frame id. */
+	const placeTemplate = useCallback(
+		(t: FlowTemplate): string => {
 			const s = templateSize(t);
 			const v = vpRef.current;
 			const cx = (size.w / 2 - v.x) / v.zoom;
@@ -319,11 +348,62 @@ export function Editor({ boardId }: { boardId: string }) {
 			}
 			const els = buildTemplate(t, origin);
 			insert(els, [els[0].id]);
-			setTemplatesOpen(false);
 			fitTo(els[0] as FrameEl);
+			return els[0].id;
+		},
+		[insert, fitTo, size, boardRef],
+	);
+
+	const insertTemplate = useCallback(
+		(t: FlowTemplate) => {
+			placeTemplate(t);
+			setTemplatesOpen(false);
 			say(`Added “${t.title}”`);
 		},
-		[insert, fitTo, size, say, boardRef],
+		[placeTemplate, say],
+	);
+
+	/** The frame the assistant should work on: a selected frame, or the frame around a selected shape. */
+	const assistantContext = useMemo((): AssistantContext => {
+		const frames = board.elements.filter((e): e is FrameEl => e.type === "frame");
+		let frame: FrameEl | undefined = selected.find((e): e is FrameEl => e.type === "frame");
+		if (!frame) {
+			const shape = selected.find(isBox);
+			if (shape) frame = frames.find((f) => contains(f, shape));
+		}
+		const spec = frame ? frameToSpec(board, frame.id) : null;
+		return {
+			selected: frame && spec ? { frameId: frame.id, spec } : null,
+			frames: frames.map((f) => f.title),
+		};
+	}, [board, selected]);
+
+	const applyFlow = useCallback(
+		(flow: FlowSpec, replaceFrameId: string | null): string => {
+			const template = specToTemplate(flow);
+			const old = replaceFrameId ? boardRef.current.elements.find((e) => e.id === replaceFrameId) : undefined;
+			if (!old || old.type !== "frame") return placeTemplate(template);
+			// Rebuild in place: same top-left corner, one undo step
+			const els = buildTemplate(template, { x: old.x, y: old.y });
+			doc.commit((b) => {
+				const gone = new Set([old.id, ...frameChildren(b, [old.id])]);
+				return addElements(deleteElements(b, gone), els);
+			});
+			setSelection(new Set([els[0].id]));
+			return els[0].id;
+		},
+		[boardRef, doc, placeTemplate],
+	);
+
+	const showFrame = useCallback(
+		(frameId: string) => {
+			const f = boardRef.current.elements.find((e) => e.id === frameId);
+			if (f && isBox(f)) {
+				fitTo(f);
+				setSelection(new Set([f.id]));
+			}
+		},
+		[boardRef, fitTo],
 	);
 
 	/* -------------------------------------------------------------- */
@@ -595,7 +675,7 @@ export function Editor({ boardId }: { boardId: string }) {
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (isTypingTarget(e.target)) return;
+			if (isTypingTarget(e.target) || document.querySelector('[aria-modal="true"]')) return;
 			const mod = e.metaKey || e.ctrlKey;
 			const key = e.key.toLowerCase();
 
@@ -739,7 +819,7 @@ export function Editor({ boardId }: { boardId: string }) {
 		try {
 			const parsed = parseBoard(JSON.parse(await file.text()));
 			if (!parsed) {
-				say("That file isn’t a Linework board.");
+				say("That file isn’t a Flowyard board.");
 				return;
 			}
 			doc.commit(() => parsed);
@@ -752,19 +832,89 @@ export function Editor({ boardId }: { boardId: string }) {
 		}
 	};
 	const newBoard = () => {
-		// The link is the only key to a board, so make it unguessable (128 bits).
-		const bytes = crypto.getRandomValues(new Uint8Array(16));
-		const id = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-		window.location.search = `?board=${id}`;
+		if (boardId) {
+			window.location.assign("/board");
+			return;
+		}
+		doc.commit(() => ({ v: 1, name: "Untitled board", elements: [] }));
+		setSelection(new Set());
+		say("Started a blank board. Press Ctrl+Z to bring the old one back.");
 	};
-	const share = async () => {
-		try {
-			await navigator.clipboard.writeText(window.location.href);
-			say("Link copied. Anyone with it can edit this board.");
-		} catch {
-			say(`Copy this link: ${window.location.href}`);
+	const rename = (name: string) => {
+		doc.commit((b) => ({ ...b, name }));
+		if (boardId && session.user) {
+			fetch(`/api/boards/${boardId}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name }),
+			}).catch(() => {});
 		}
 	};
+	const returnTo = (extra = "") => `${window.location.pathname}${window.location.search}${extra}`;
+
+	/** Shared boards: show the link. Browser-only boards: sign in, then create one. */
+	const share = useCallback(async () => {
+		if (boardId) {
+			setShareOpen(true);
+			return;
+		}
+		if (!session.user) {
+			setSignIn("share");
+			return;
+		}
+		setSharing(true);
+		try {
+			const res = await fetch("/api/boards", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ doc: boardRef.current }),
+			});
+			const data = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+			if (res.status === 401) {
+				setSignIn("share");
+				return;
+			}
+			if (!res.ok || !data?.id) {
+				say(data?.error ?? "Couldn't create a share link. Try again.");
+				return;
+			}
+			saveLocal(data.id, boardRef.current);
+			onShared(data.id);
+		} catch {
+			say("Couldn't reach the server. Check your connection and try again.");
+		} finally {
+			setSharing(false);
+		}
+	}, [boardId, session.user, boardRef, onShared, say]);
+
+	// Arriving from a template link on the homepage (/board#template=<id>): place it once.
+	const handledTemplate = useRef(false);
+	useEffect(() => {
+		if (handledTemplate.current || size.w === 0 || !fitted.current) return;
+		handledTemplate.current = true;
+		const id = new URLSearchParams(window.location.hash.slice(1)).get("template");
+		if (!id) return;
+		window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+		const t = TEMPLATES.find((x) => x.id === id);
+		if (t) insertTemplate(t);
+	}, [size.w, insertTemplate]);
+
+	// Arriving back from sign-in: report errors, or finish the share that started it.
+	const handledReturn = useRef(false);
+	useEffect(() => {
+		if (session.loading || handledReturn.current) return;
+		handledReturn.current = true;
+		const params = new URLSearchParams(window.location.search);
+		const err = params.get("signin_error");
+		const wantsShare = params.get("share") === "1";
+		if (!err && !wantsShare) return;
+		params.delete("signin_error");
+		params.delete("share");
+		const rest = params.toString();
+		window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
+		if (err) say(err.slice(0, 160));
+		else if (session.user) share();
+	}, [session.loading, session.user, share, say]);
 
 	/* -------------------------------------------------------------- */
 	/* Render                                                          */
@@ -996,14 +1146,33 @@ export function Editor({ boardId }: { boardId: string }) {
 
 			<BoardMenu
 				name={board.name}
-				onRename={(name) => doc.commit((b) => ({ ...b, name }))}
+				onRename={rename}
 				onExportPng={exportPng}
 				onExportSvg={exportSvg}
 				onExportJson={exportJson}
 				onImportJson={importJson}
 				onNewBoard={newBoard}
+				shared={Boolean(boardId)}
 			/>
-			<ShareBar status={doc.status} presence={doc.presence} onShare={share} />
+			<ShareBar
+				status={doc.status}
+				presence={doc.presence}
+				sharing={sharing}
+				disabled={!boardId && session.loading}
+				onShare={share}
+			>
+				<button
+					type="button"
+					className="ghost-btn"
+					aria-pressed={assistantOpen}
+					data-active={assistantOpen || undefined}
+					onClick={() => setAssistantOpen((o) => !o)}
+				>
+					<Icons.sparkle />
+					<span className="ghost-label">Assistant</span>
+				</button>
+				<AccountButton session={session} onSignIn={() => setSignIn("general")} onBoards={() => setBoardsOpen(true)} />
+			</ShareBar>
 			<Toolbar
 				tool={tool}
 				onTool={(t) => {
@@ -1015,6 +1184,32 @@ export function Editor({ boardId }: { boardId: string }) {
 			/>
 			{templatesOpen && <TemplatesPanel onInsert={insertTemplate} onClose={() => setTemplatesOpen(false)} />}
 			{helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
+			{assistantOpen && (
+				<AssistantPanel
+					session={session}
+					context={assistantContext}
+					applyFlow={applyFlow}
+					showFrame={showFrame}
+					onSignIn={() => setSignIn("assistant")}
+					onClose={() => setAssistantOpen(false)}
+				/>
+			)}
+			{signIn && (
+				<SignInDialog
+					session={session}
+					reason={signIn}
+					returnTo={returnTo(signIn === "share" && !boardId ? `${window.location.search ? "&" : "?"}share=1` : "")}
+					onClose={() => setSignIn(null)}
+				/>
+			)}
+			{shareOpen && boardId && (
+				<ShareDialog
+					link={`${window.location.origin}/board?board=${boardId}`}
+					onClose={() => setShareOpen(false)}
+					onCopied={() => say("Link copied")}
+				/>
+			)}
+			{boardsOpen && <BoardsPanel currentId={boardId} onClose={() => setBoardsOpen(false)} />}
 			<HistoryBar canUndo={doc.canUndo} canRedo={doc.canRedo} onUndo={doc.undo} onRedo={doc.redo} />
 			<ZoomBar
 				zoom={z}
