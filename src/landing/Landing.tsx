@@ -67,10 +67,10 @@ export function Landing() {
 					<a href="/dashboard">Dashboard</a>
 				</nav>
 				<div className="fy-nav-actions">
-					<a className="fy-btn fy-btn-quiet" href="/dashboard">
+					<a className="fy-btn fy-btn-link" href="/dashboard">
 						Sign in
 					</a>
-					<a className="fy-btn fy-btn-primary" href={BOARD_URL}>
+					<a className="fy-btn fy-btn-outline" href={BOARD_URL}>
 						Start a board
 					</a>
 				</div>
@@ -79,7 +79,16 @@ export function Landing() {
 			<main>
 				<section className="fy-hero">
 					<div className="fy-hero-copy">
-						<h1>Draw the flow before you ship it.</h1>
+						<p className="fy-eyebrow">
+								<span className="fy-eyebrow-rule" aria-hidden="true" />
+								<span className="fy-eyebrow-dot" aria-hidden="true" />
+								Flowcharts for security teams
+							</p>
+							<h1>
+								Draw the flow.
+								<br />
+								Ship it <em>secure.</em>
+							</h1>
 						<p>
 							Flowyard is a whiteboard for security and system flows. Start from a real template, or describe a flow and the
 							assistant draws it. Share one link and edit together, live.
@@ -88,7 +97,7 @@ export function Landing() {
 							<a className="fy-btn fy-btn-primary fy-btn-large" href={BOARD_URL}>
 								Start a board
 							</a>
-							<a className="fy-btn fy-btn-quiet fy-btn-large" href="#templates">
+							<a className="fy-btn fy-btn-link fy-btn-large" href="#templates">
 								Browse templates
 							</a>
 						</div>
@@ -98,7 +107,9 @@ export function Landing() {
 				</section>
 
 				<section className="fy-meanings" aria-labelledby="meanings-title">
-					<h2 id="meanings-title">Every color means something</h2>
+					<h2 id="meanings-title">
+						Every color <em>means</em> something.
+					</h2>
 					<p className="fy-lede">
 						Flowyard boards share one visual language, so anyone reading a flow knows where the checks are and what happens when
 						they fail.
@@ -116,7 +127,9 @@ export function Landing() {
 
 				<section className="fy-templates" id="templates" aria-labelledby="templates-title">
 					<div className="fy-section-head">
-						<h2 id="templates-title">Start from a flow that's already right</h2>
+						<h2 id="templates-title">
+							Start from a flow that's already <em>right.</em>
+						</h2>
 						<p className="fy-lede">Each template follows the real standard and names the actual checks. Open one and edit it.</p>
 					</div>
 					<ul className="fy-template-grid">
@@ -136,7 +149,9 @@ export function Landing() {
 
 				<section className="fy-assistant" id="assistant" aria-labelledby="assistant-title">
 					<div className="fy-assistant-copy">
-						<h2 id="assistant-title">Describe it. Get a diagram.</h2>
+						<h2 id="assistant-title">
+							Describe it. Get a <em>diagram.</em>
+						</h2>
 						<p className="fy-lede">
 							Ask for a flow and the assistant draws it on your board. Select a frame and ask for a change, and it edits that flow
 							in place. Every change can be undone.
@@ -153,7 +168,9 @@ export function Landing() {
 				</section>
 
 				<section className="fy-how" aria-labelledby="how-title">
-					<h2 id="how-title">How it works</h2>
+					<h2 id="how-title">
+						How it <em>works.</em>
+					</h2>
 					<ol className="fy-how-flow">
 						<li>
 							<strong>Draw</strong>
@@ -171,7 +188,9 @@ export function Landing() {
 				</section>
 
 				<section className="fy-cta">
-					<h2>Your next flow starts on a blank board.</h2>
+					<h2>
+						Your next flow starts on a blank <em>board.</em>
+					</h2>
 					<a className="fy-btn fy-btn-primary fy-btn-large" href={BOARD_URL}>
 						Start a board
 					</a>

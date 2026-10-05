@@ -1,4 +1,4 @@
-/* Dashboard and profile. Uses the editor's tokens from index.css (light and dark). */
+/* Dashboard and profile. Uses the shared tokens from index.css. */
 
 .dash {
 	display: grid;
@@ -35,7 +35,7 @@
 	color: var(--ink);
 	text-decoration: none;
 	font-family: var(--font-display);
-	font-weight: 700;
+	font-weight: 500;
 	font-size: 19px;
 	letter-spacing: -0.02em;
 }
@@ -47,7 +47,7 @@
 	padding: 0 10px;
 	height: 38px;
 	border: 1px solid var(--chrome-line);
-	border-radius: 9px;
+	border-radius: 4px;
 	background: var(--chrome);
 	color: var(--ink-soft);
 }
@@ -79,7 +79,7 @@
 	height: 38px;
 	padding: 0 12px;
 	border: 0;
-	border-radius: 8px;
+	border-radius: 4px;
 	background: none;
 	color: var(--ink);
 	font: inherit;
@@ -109,7 +109,7 @@
 	gap: 2px;
 	padding: 10px 12px;
 	border: 1px dashed var(--chrome-line);
-	border-radius: 9px;
+	border-radius: 4px;
 	color: var(--ink);
 	text-decoration: none;
 	font-weight: 500;
@@ -132,7 +132,7 @@
 	align-items: flex-start;
 	gap: 6px;
 	padding: 14px;
-	border-radius: 10px;
+	border-radius: 4px;
 	background: var(--chrome);
 	border: 1px solid var(--chrome-line);
 	font-size: 13px;
@@ -204,7 +204,7 @@
 /* Templates */
 .dash-templates {
 	padding: 18px;
-	border-radius: 14px;
+	border-radius: 6px;
 	background: var(--canvas);
 	margin-bottom: 32px;
 }
@@ -250,8 +250,8 @@
 	justify-content: center;
 	height: 96px;
 	padding: 6px;
-	border-radius: 10px;
-	background: #fff;
+	border-radius: 4px;
+	background: var(--canvas);
 	border: 1px solid var(--chrome-line);
 	overflow: hidden;
 	transition: border-color 0.12s, box-shadow 0.12s;
@@ -313,7 +313,7 @@
 	height: 34px;
 	padding: 0 8px;
 	border: 1px solid var(--chrome-line);
-	border-radius: 8px;
+	border-radius: 4px;
 	background: var(--chrome);
 	color: var(--ink);
 	font: inherit;
@@ -333,7 +333,7 @@
 .dash-empty {
 	padding: 48px 16px;
 	border: 1px dashed var(--chrome-line);
-	border-radius: 12px;
+	border-radius: 6px;
 	text-align: center;
 	color: var(--ink-soft);
 }
@@ -383,7 +383,7 @@
 	width: 30px;
 	height: 30px;
 	border: 0;
-	border-radius: 6px;
+	border-radius: 3px;
 	background: none;
 	color: var(--ink-soft);
 	cursor: pointer;
@@ -433,7 +433,7 @@ a.board-name-cell:hover strong {
 .menu a {
 	display: block;
 	padding: 8px 10px;
-	border-radius: 6px;
+	border-radius: 3px;
 	color: var(--ink);
 	text-decoration: none;
 }
@@ -455,7 +455,7 @@ a.board-name-cell:hover strong {
 	margin: 2px 2px 6px;
 	padding: 8px;
 	border: 1px solid var(--chrome-line);
-	border-radius: 8px;
+	border-radius: 4px;
 	font-weight: 600;
 }
 
@@ -652,7 +652,7 @@ a.board-name-cell:hover strong {
 	justify-content: space-between;
 	gap: 16px;
 	padding: 14px 16px;
-	border-radius: 10px;
+	border-radius: 4px;
 	border: 1px dashed var(--chrome-line);
 }
 
@@ -681,7 +681,7 @@ a.board-name-cell:hover strong {
 	height: 36px;
 	padding: 0 10px;
 	border: 1px solid var(--chrome-line);
-	border-radius: 8px;
+	border-radius: 4px;
 	background: var(--chrome);
 	color: var(--ink);
 	font: inherit;
@@ -692,9 +692,9 @@ a.board-name-cell:hover strong {
 	height: 36px;
 	padding: 0 14px;
 	border: 0;
-	border-radius: 8px;
+	border-radius: 4px;
 	background: var(--deny);
-	color: #fff;
+	color: #1a0d0f;
 	font: inherit;
 	font-weight: 600;
 	cursor: pointer;
@@ -762,7 +762,7 @@ a.board-name-cell:hover strong {
 .dash-scheduled {
 	margin: 0;
 	padding: 12px 14px;
-	border-radius: 10px;
+	border-radius: 4px;
 	border-left: 3px solid var(--decision);
 	background: var(--decision-fill);
 	color: var(--ink) !important;
@@ -791,4 +791,94 @@ a.board-name-cell:hover strong {
 .dash-signin-card h1,
 .profile-hero h1 {
 	text-wrap: balance;
+}
+
+/* ─── Linework house style ────────────────────── */
+
+/* Page headings: light sans with the accent word (see index.css) */
+.dash-boards-head h1,
+.dash-signin-card h1,
+.profile-hero h1 {
+	font-weight: 300;
+	letter-spacing: -0.02em;
+}
+
+.dash-boards-head h1 {
+	font-size: 34px;
+}
+
+.dash-signin-card h1 {
+	font-size: 30px;
+}
+
+.profile-hero h1 {
+	font-size: 30px;
+}
+
+/* Section and column labels: tracked mono capitals */
+.dash-templates h2,
+.profile-section h2,
+.dash-table th,
+.dash-plan-badge,
+.dash-filters label > span {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+}
+
+.profile-danger h2 {
+	color: var(--deny);
+}
+
+.dash-plan-badge {
+	border-radius: 0;
+	border-color: var(--teal);
+	color: var(--teal);
+}
+
+/* A teal rule marks the active view, like the homepage's labels */
+.dash-nav button[data-active] {
+	background: var(--select-soft);
+	box-shadow: inset 2px 0 0 var(--teal);
+}
+
+.dash-brand svg,
+.profile-top .dash-brand svg {
+	color: var(--teal);
+}
+
+.dash-brand {
+	font-weight: 500;
+}
+
+/* Hover feedback on rows and cards */
+.dash-table tbody tr {
+	transition: background 0.12s;
+}
+
+.dash-template-thumb {
+	transition: border-color 0.12s, transform 0.15s;
+}
+
+.dash-template:hover .dash-template-thumb {
+	transform: translateY(-2px);
+}
+
+/* Faint drafting grid behind the signed-out card, as on the homepage */
+.dash-signed-out {
+	--grid-line: rgb(42 52 66 / 0.45);
+	background:
+		radial-gradient(520px 380px at 50% 20%, rgb(20 180 210 / 0.1), transparent 70%),
+		linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 56px 56px,
+		linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 56px 56px,
+		var(--canvas);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dash-template:hover .dash-template-thumb {
+		transform: none;
+	}
 }
