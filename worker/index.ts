@@ -1,123 +1,53 @@
-// Export the Workflow and Durable Object classes
-export { MyWorkflow } from "./workflow";
-export { WorkflowStatusDO } from "./durable-object";
+export { BoardDO } from "./board-do";
+
+const BOARD_ID = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /**
  * Main Worker fetch handler
  *
- * Handles API routes and WebSocket upgrade requests for workflow management:
- * - POST /api/workflow/start - Create new workflow instance
- * - GET /api/workflow/status/:id - Get workflow status
- * - POST /api/workflow/event/:id - Send events to workflow
- * - GET /ws - WebSocket connection for real-time updates
+ * - GET /api/board/:id - Read a board (null doc if never saved)
+ * - PUT /api/board/:id - Replace a board
+ * - GET /ws?board=:id  - WebSocket for live edits on a board
  */
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 
-		// API: Start a new workflow instance
-		if (url.pathname === "/api/workflow/start" && request.method === "POST") {
-			try {
-				const instance = await env.MY_WORKFLOW.create({
-					params: {
-						timestamp: Date.now(),
-					},
-				});
-
-				return Response.json({
-					instanceId: instance.id,
-					message: "Workflow started successfully",
-				});
-			} catch {
-				return Response.json(
-					{ error: "Failed to start workflow" },
-					{ status: 500 },
-				);
+		if (url.pathname.startsWith("/api/board/")) {
+			const id = url.pathname.slice("/api/board/".length);
+			if (!BOARD_ID.test(id)) {
+				return Response.json({ error: "Board id can use letters, numbers, - and _ only." }, { status: 400 });
 			}
+			const stub = env.BOARD.get(env.BOARD.idFromName(id));
+
+			if (request.method === "GET") {
+				return Response.json(await stub.getBoard());
+			}
+			if (request.method === "PUT") {
+				let body: unknown;
+				try {
+					body = await request.json();
+				} catch {
+					return Response.json({ error: "Body must be JSON." }, { status: 400 });
+				}
+				const rev = await stub.saveBoard(body);
+				if (rev === null) {
+					return Response.json({ error: "Board is malformed or too large." }, { status: 422 });
+				}
+				return Response.json({ rev });
+			}
+			return Response.json({ error: "Method not allowed" }, { status: 405 });
 		}
 
-		// API: Get workflow status
-		if (url.pathname.startsWith("/api/workflow/status/")) {
-			const instanceId = url.pathname.split("/").pop();
-			if (!instanceId) {
-				return Response.json(
-					{ error: "Instance ID required" },
-					{ status: 400 },
-				);
-			}
-
-			try {
-				const instance = await env.MY_WORKFLOW.get(instanceId);
-				const status = await instance.status();
-				return Response.json(status);
-			} catch {
-				return Response.json(
-					{ error: "Failed to get workflow status" },
-					{ status: 500 },
-				);
-			}
-		}
-
-		// API: Send event to workflow instance
-		if (
-			url.pathname.startsWith("/api/workflow/event/") &&
-			request.method === "POST"
-		) {
-			const instanceId = url.pathname.split("/").pop();
-			if (!instanceId) {
-				return Response.json(
-					{ error: "Instance ID required" },
-					{ status: 400 },
-				);
-			}
-
-			try {
-				const body = (await request.json()) as {
-					approved: boolean;
-					comment?: string;
-				};
-				const instance = await env.MY_WORKFLOW.get(instanceId);
-
-				await instance.sendEvent({
-					type: "user-approval",
-					payload: body,
-				});
-
-				return Response.json({
-					success: true,
-					message: "Event sent successfully",
-				});
-			} catch {
-				return Response.json(
-					{ error: "Failed to send event" },
-					{ status: 500 },
-				);
-			}
-		}
-
-		// WebSocket: Connect to workflow status updates
 		if (url.pathname === "/ws") {
-			const instanceId = url.searchParams.get("instanceId");
-			if (!instanceId) {
-				return new Response("instanceId query parameter required", {
-					status: 400,
-				});
+			const id = url.searchParams.get("board") ?? "";
+			if (!BOARD_ID.test(id)) {
+				return new Response("board query parameter required", { status: 400 });
 			}
-
-			const upgradeHeader = request.headers.get("Upgrade");
-			if (upgradeHeader !== "websocket") {
+			if (request.headers.get("Upgrade") !== "websocket") {
 				return new Response("Expected Upgrade: websocket", { status: 426 });
 			}
-
-			try {
-				const doId = env.WORKFLOW_STATUS.idFromName(instanceId);
-				const stub = env.WORKFLOW_STATUS.get(doId);
-				return stub.fetch(request);
-			} catch {
-				return new Response("Failed to establish WebSocket connection", {
-					status: 500,
-				});
-			}
+			return env.BOARD.get(env.BOARD.idFromName(id)).fetch(request);
 		}
 
 		return Response.json({ error: "Not Found" }, { status: 404 });

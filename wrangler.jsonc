@@ -15,27 +15,15 @@
 		"enabled": true
 	},
 	/**
-	 * Workflows
-	 * Define Workflows to orchestrate multi-step processes
-	 * https://developers.cloudflare.com/workflows/
-	 */
-	"workflows": [
-		{
-			"name": "my-workflow",
-			"binding": "MY_WORKFLOW",
-			"class_name": "MyWorkflow"
-		}
-	],
-	/**
 	 * Durable Objects
-	 * Used for WebSocket state management and real-time updates
+	 * One BoardDO per board: stores the document and relays live edits
 	 * https://developers.cloudflare.com/durable-objects/
 	 */
 	"durable_objects": {
 		"bindings": [
 			{
-				"name": "WORKFLOW_STATUS",
-				"class_name": "WorkflowStatusDO"
+				"name": "BOARD",
+				"class_name": "BoardDO"
 			}
 		]
 	},
@@ -47,6 +35,11 @@
 		{
 			"tag": "v1",
 			"new_sqlite_classes": ["WorkflowStatusDO"]
+		},
+		{
+			"tag": "v2",
+			"deleted_classes": ["WorkflowStatusDO"],
+			"new_sqlite_classes": ["BoardDO"]
 		}
 	],
 	"upload_source_maps": true
