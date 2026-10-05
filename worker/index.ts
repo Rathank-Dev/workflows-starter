@@ -15,6 +15,7 @@ import { connect, type Sql } from "./db";
 import { SECURITY_HEADERS, error, json, randomHex, sameOrigin } from "./http";
 
 export { BoardDO } from "./board-do";
+import { boardStore, purgeDue } from "./account";
 
 const BOARD_ID = /^[a-f0-9]{32}$/;
 const BOARDS_PER_DAY = 30;
@@ -95,6 +96,16 @@ export default {
 			if (sql) ctx.waitUntil((sql as Sql).end({ timeout: 5 }));
 		}
 	},
+	/** Daily (Cron Trigger): finish 30-day account deletions, empty old trash, drop old counters. */
+	async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+		const sql = connect(env);
+		try {
+			const done = await purgeDue(sql, boardStore(env));
+			console.log("Daily cleanup", done);
+		} finally {
+			ctx.waitUntil(sql.end({ timeout: 5 }));
+		}
+	},
 } satisfies ExportedHandler<Env>;
 
 async function route(request: Request, env: Env, url: URL, db: () => Sql): Promise<Response> {
@@ -114,7 +125,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 
 	if (path === "/api/dashboard" && method === "GET") {
 		const user = await currentUser(request, db());
-		return user ? listDashboard(db(), env, user) : error("Sign in to see your dashboard.", 401);
+		return user ? listDashboard(db(), user) : error("Sign in to see your dashboard.", 401);
 	}
 	if (path === "/api/profile" && method === "GET") {
 		const user = await currentUser(request, db());

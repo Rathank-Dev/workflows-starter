@@ -16,6 +16,13 @@
 		// Sign-in redirects are browser navigations; send them to the Worker, not index.html
 		"run_worker_first": ["/api/*", "/auth/*", "/ws"]
 	},
+	/**
+	 * Daily cleanup at 03:17 UTC: finishes 30-day account deletions, empties
+	 * boards that have been in the trash 30 days, and drops old usage counters.
+	 */
+	"triggers": {
+		"crons": ["17 3 * * *"]
+	},
 	"observability": {
 		"enabled": true
 	},

@@ -1,4 +1,5 @@
 import { Discord, GitHub, Google, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
+import { cancelPendingDeletion } from "./account";
 import type { Sql, User } from "./db";
 import { error, getCookie, randomToken, safeReturnTo, setCookie, sha256Hex } from "./http";
 
@@ -164,6 +165,8 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 	}
 
 	const user = await upsertUser(sql, provider, profile);
+	// Signing in within the 30 days cancels a scheduled account deletion
+	const restored = await cancelPendingDeletion(sql, user.id);
 	const token = randomToken();
 	await sql`
 		insert into sessions (id, user_id, expires_at)
@@ -172,7 +175,7 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 	// Opportunistic cleanup of this user's expired sessions
 	await sql`delete from sessions where user_id = ${user.id} and expires_at < now()`;
 
-	const headers = new Headers({ Location: safeReturnTo(saved.r) });
+	const headers = new Headers({ Location: restored ? "/dashboard?account_restored=1" : safeReturnTo(saved.r) });
 	headers.append("Set-Cookie", clearState);
 	headers.append("Set-Cookie", setCookie(SESSION_COOKIE, token, { maxAge: SESSION_DAYS * 86400 }));
 	return new Response(null, { status: 302, headers });

@@ -4,19 +4,38 @@
 /* Tokens                                                              */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Flow-color system. Brand colors are the diagram's own meanings, used only
+ * where that meaning applies: step (blue), decision (yellow), check (purple),
+ * deny (red), pass (green). Strokes match shared/board.ts COLORS.
+ */
 :root {
-	--canvas: #eef0f4;
-	--grid: #c9ced8;
+	--canvas: #eef2f7;
+	--grid: #c6cfdc;
 	--chrome: #ffffff;
-	--chrome-hover: #f0f2f5;
-	--chrome-line: #dde1e7;
-	--ink: #1d2330;
-	--ink-soft: #5a6476;
-	--select: #0b7a84;
-	--select-soft: #dff1f2;
-	--board-ink: #1d2330;
-	--danger: #c23a41;
-	--shadow: 0 1px 2px rgb(29 35 48 / 0.06), 0 6px 20px -6px rgb(29 35 48 / 0.16);
+	--chrome-hover: #f1f4f9;
+	--chrome-line: #d6dde7;
+	--ink: #13233d;
+	--ink-soft: #5b6b82;
+	--select: #3d6bd6;
+	--select-soft: #e3ebfd;
+	--action: #13233d;
+	--on-action: #ffffff;
+	--board-ink: #13233d;
+	--danger: #d9484f;
+
+	--step: #3d6bd6;
+	--step-fill: #d3e2ff;
+	--decision: #b38700;
+	--decision-fill: #fff0b3;
+	--check: #7556d9;
+	--check-fill: #e4dcff;
+	--deny: #c8383f;
+	--deny-fill: #ffd6d6;
+	--pass: #2a8a4f;
+	--pass-fill: #cdefd6;
+
+	--shadow: 0 1px 2px rgb(19 35 61 / 0.06), 0 8px 24px -10px rgb(19 35 61 / 0.18);
 	--font-ui: Onest, "Segoe UI", system-ui, sans-serif;
 	--font-display: "Bricolage Grotesque", var(--font-ui);
 	color-scheme: light;
@@ -24,33 +43,59 @@
 
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
-		--canvas: #15181e;
-		--grid: #3a404c;
-		--chrome: #20242c;
-		--chrome-hover: #2a2f39;
-		--chrome-line: #343a46;
-		--ink: #e7eaef;
-		--ink-soft: #9aa3b2;
-		--select: #38bcc6;
-		--select-soft: #18393d;
-		--board-ink: #e7eaef;
-		--shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -8px rgb(0 0 0 / 0.5);
+		--canvas: #0e1626;
+		--grid: #2b3852;
+		--chrome: #16213a;
+		--chrome-hover: #1e2b48;
+		--chrome-line: #2a3754;
+		--ink: #e8eef8;
+		--ink-soft: #9aa9c2;
+		--select: #7d9ef0;
+		--select-soft: #1f2f55;
+		--action: #7d9ef0;
+		--on-action: #0e1626;
+		--board-ink: #e8eef8;
+		--danger: #f07a80;
+		--step: #7d9ef0;
+		--step-fill: #1f2f55;
+		--decision: #e8bf3a;
+		--decision-fill: #3a3016;
+		--check: #a690f5;
+		--check-fill: #2c2350;
+		--deny: #f07a80;
+		--deny-fill: #44202a;
+		--pass: #5cc489;
+		--pass-fill: #173a2a;
+		--shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 28px -10px rgb(0 0 0 / 0.6);
 		color-scheme: dark;
 	}
 }
 
 :root[data-theme="dark"] {
-	--canvas: #15181e;
-	--grid: #3a404c;
-	--chrome: #20242c;
-	--chrome-hover: #2a2f39;
-	--chrome-line: #343a46;
-	--ink: #e7eaef;
-	--ink-soft: #9aa3b2;
-	--select: #38bcc6;
-	--select-soft: #18393d;
-	--board-ink: #e7eaef;
-	--shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -8px rgb(0 0 0 / 0.5);
+	--canvas: #0e1626;
+	--grid: #2b3852;
+	--chrome: #16213a;
+	--chrome-hover: #1e2b48;
+	--chrome-line: #2a3754;
+	--ink: #e8eef8;
+	--ink-soft: #9aa9c2;
+	--select: #7d9ef0;
+	--select-soft: #1f2f55;
+	--action: #7d9ef0;
+	--on-action: #0e1626;
+	--board-ink: #e8eef8;
+	--danger: #f07a80;
+	--step: #7d9ef0;
+	--step-fill: #1f2f55;
+	--decision: #e8bf3a;
+	--decision-fill: #3a3016;
+	--check: #a690f5;
+	--check-fill: #2c2350;
+	--deny: #f07a80;
+	--deny-fill: #44202a;
+	--pass: #5cc489;
+	--pass-fill: #173a2a;
+	--shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 10px 28px -10px rgb(0 0 0 / 0.6);
 	color-scheme: dark;
 }
 
@@ -354,8 +399,8 @@
 	padding: 0 14px 0 10px;
 	border: 0;
 	border-radius: 8px;
-	background: var(--select);
-	color: #fff;
+	background: var(--action);
+	color: var(--on-action);
 	font: inherit;
 	font-weight: 500;
 	cursor: pointer;
@@ -799,8 +844,8 @@
 	padding: 0 14px;
 	border: 0;
 	border-radius: 8px;
-	background: var(--select);
-	color: #fff;
+	background: var(--action);
+	color: var(--on-action);
 	font: inherit;
 	font-weight: 500;
 	cursor: pointer;

@@ -50,8 +50,9 @@ export function Profile({ session }: { session: Session }) {
 			body: JSON.stringify({ confirm: confirmText }),
 		});
 		setDeleting(false);
-		if (res.ok) window.location.assign("/");
-		else setMessage("Couldn't delete your account. Try again.");
+		const body = (await res.json().catch(() => null)) as { deleteAt?: string } | null;
+		if (res.ok && body?.deleteAt) window.location.assign(`/dashboard?account_scheduled=${encodeURIComponent(body.deleteAt)}`);
+		else setMessage("Couldn't schedule your account for deletion. Try again.");
 	};
 
 	const connected = new Set(data?.accounts.map((a) => a.provider));
@@ -79,8 +80,8 @@ export function Profile({ session }: { session: Session }) {
 				)}
 
 				{data && (
-					<>
-						<section className="panel profile-card profile-hero">
+					<div className="panel profile-sheet">
+						<section className="profile-section profile-hero">
 							<Avatar user={data.user} size={64} />
 							<div>
 								<h1>{data.user.name}</h1>
@@ -92,7 +93,7 @@ export function Profile({ session }: { session: Session }) {
 							</div>
 						</section>
 
-						<section className="panel profile-card">
+						<section className="profile-section">
 							<h2>Sign-in methods</h2>
 							<ul className="profile-list">
 								{ALL_PROVIDERS.map((p) => (
@@ -126,7 +127,7 @@ export function Profile({ session }: { session: Session }) {
 							)}
 						</section>
 
-						<section className="panel profile-card" id="plan">
+						<section className="profile-section" id="plan">
 							<h2>Plan and usage</h2>
 							<ul className="profile-list">
 								<li>
@@ -155,7 +156,7 @@ export function Profile({ session }: { session: Session }) {
 							</div>
 						</section>
 
-						<section className="panel profile-card">
+						<section className="profile-section">
 							<h2>Security</h2>
 							<ul className="profile-list">
 								<li>
@@ -168,10 +169,11 @@ export function Profile({ session }: { session: Session }) {
 							</button>
 						</section>
 
-						<section className="panel profile-card profile-danger">
+						<section className="profile-section profile-danger">
 							<h2>Delete account</h2>
 							<p className="small">
-								Permanently deletes your account and every board you own, including boards other people are editing. This can't be undone.
+								You'll be logged out everywhere, and your boards go to the trash; their links stop working, including for people editing them now.
+								Everything is deleted for good after 30 days. Sign in again before then to cancel and get your boards back.
 							</p>
 							<label className="profile-confirm">
 								<span>
@@ -180,10 +182,10 @@ export function Profile({ session }: { session: Session }) {
 								<input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
 							</label>
 							<button type="button" className="danger-btn" disabled={confirmText !== "DELETE" || deleting} onClick={deleteAccount}>
-								{deleting ? "Deleting…" : "Delete my account"}
+								{deleting ? "Scheduling…" : "Delete my account in 30 days"}
 							</button>
 						</section>
-					</>
+					</div>
 				)}
 			</main>
 		</div>

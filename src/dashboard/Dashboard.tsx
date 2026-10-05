@@ -86,6 +86,16 @@ export function Dashboard({ session }: { session: Session }) {
 		if (!session.loading && session.user) load();
 	}, [session.loading, session.user, load]);
 
+	// Back from a cancelled account deletion
+	const [notice] = useState(() => new URLSearchParams(window.location.search));
+	useEffect(() => {
+		if (notice.get("account_restored") === "1") {
+			say("Welcome back. Your account deletion is cancelled and your boards are restored.");
+			window.history.replaceState(null, "", "/dashboard");
+		}
+	}, [notice, say]);
+	const scheduledFor = notice.get("account_scheduled");
+
 	const go = (v: View) => {
 		setView(v);
 		window.history.replaceState(null, "", v === "home" ? "/dashboard" : `/dashboard?view=${v}`);
@@ -217,6 +227,13 @@ export function Dashboard({ session }: { session: Session }) {
 					<span>Flowyard</span>
 				</a>
 				<div className="panel dash-signin-card">
+					{scheduledFor && !Number.isNaN(Date.parse(scheduledFor)) && (
+						<p className="dash-scheduled" role="status">
+							Your account will be deleted on{" "}
+							<strong>{new Date(scheduledFor).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}</strong>.
+							Changed your mind? Sign in before then to keep it and get your boards back.
+						</p>
+					)}
 					<h1>Sign in to your dashboard</h1>
 					<p>See your shared boards, starred flows, and trash in one place.</p>
 					{session.providers.length === 0 ? (
@@ -267,6 +284,11 @@ export function Dashboard({ session }: { session: Session }) {
 				</a>
 				<div className="dash-plan">
 					<strong>Free plan</strong>
+					<span className="ai-meter" role="img" aria-label={`${session.aiRemaining ?? session.aiDailyLimit} of ${session.aiDailyLimit} assistant requests left today`}>
+						{Array.from({ length: session.aiDailyLimit }, (_, i) => (
+							<span key={i} data-on={i < (session.aiRemaining ?? session.aiDailyLimit) || undefined} />
+						))}
+					</span>
 					<span>
 						{session.aiRemaining ?? session.aiDailyLimit} of {session.aiDailyLimit} assistant requests left today
 					</span>
