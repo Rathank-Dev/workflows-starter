@@ -33,18 +33,34 @@ Leave a provider's pair empty to hide its button. Every assistant provider you c
 
 ### Deploying
 
+Live at **https://flowyard.khmersec.workers.dev** (Worker `flowyard`, Hyperdrive config `flowyard-db`).
+
+**Automatic:** [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) is connected to the `flowyard` Worker and deploys every push to `main` (`npm run build`, then `npm run deploy`). Merge a pull request and it ships.
+
+**By hand**, from a machine logged in with `npx wrangler login`:
+
 ```bash
-# 1. Point Hyperdrive at Postgres, then paste the id it prints into wrangler.jsonc
-npx wrangler hyperdrive create linework-db --connection-string="postgres://..."
-
-# 2. Add the secrets you use
-npx wrangler secret put GITHUB_CLIENT_ID      # and the rest from the table above
-
-# 3. Ship it
 npm run deploy
 ```
 
-The Worker reaches Postgres through [Hyperdrive](https://developers.cloudflare.com/hyperdrive/), which pools connections and handles TLS. Databases with a private certificate authority (Aiven, for example) work with `sslmode=require`. To also verify the server certificate, upload the CA with `npx wrangler cert upload certificate-authority --ca-cert ca.pem --name aiven-ca` and recreate the Hyperdrive config with `--sslmode verify-full --ca-certificate-id <id>`.
+**Production secrets** (set once, not in git):
+
+```bash
+npx wrangler secret put GITHUB_CLIENT_ID      # and the rest from the table above
+```
+
+OAuth callback URLs for production: `https://flowyard.khmersec.workers.dev/auth/callback/github` (or `google`, `discord`).
+
+**Setting up a new environment** (only if you recreate it): create the Hyperdrive config with caching off, then put its id in `wrangler.jsonc`:
+
+```bash
+npx wrangler hyperdrive create flowyard-db --connection-string="postgres://..." \
+  --sslmode require --caching-disabled --origin-connection-limit 15
+```
+
+Caching stays off so session checks and board lists are never stale. Databases with a private certificate authority (Aiven, for example) work with `sslmode=require`. To also verify the server certificate, upload the CA with `npx wrangler cert upload certificate-authority --ca-cert ca.pem --name aiven-ca` and switch Hyperdrive to `--sslmode verify-full --ca-certificate-id <id>`.
+
+The Worker uses one Durable Object class, `BoardDO` (migration `v1`). If you ever deploy to a different, older Worker, its migration history must match, or the deploy fails with code 10064.
 
 ## Using the board
 
