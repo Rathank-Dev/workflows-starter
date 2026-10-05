@@ -28,23 +28,32 @@ export function wrapText(text: string, maxWidth: number, size: TextSize, bold: b
 	const measure = (s: string) => ctx!.measureText(s).width;
 
 	const lines: string[] = [];
+	// A word wider than the box: hard-break it. Binary search keeps this at
+	// O(n log n) measurements, so a long word from a shared board can't stall the tab.
+	const breakLong = (s: string): string => {
+		while (s.length > 1 && measure(s) > maxWidth) {
+			let lo = 1;
+			let hi = s.length - 1;
+			while (lo < hi) {
+				const mid = (lo + hi + 1) >> 1;
+				if (measure(s.slice(0, mid)) <= maxWidth) lo = mid;
+				else hi = mid - 1;
+			}
+			lines.push(s.slice(0, lo));
+			s = s.slice(lo);
+		}
+		return s;
+	};
 	for (const para of text.split("\n")) {
 		const words = para.split(/(\s+)/).filter((w) => w.length > 0);
 		let line = "";
 		for (const word of words) {
 			const next = line + word;
 			if (measure(next) <= maxWidth || !line.trim()) {
-				line = next;
-				// A single word wider than the box: hard-break it.
-				while (measure(line) > maxWidth && line.length > 1) {
-					let cut = line.length - 1;
-					while (cut > 1 && measure(line.slice(0, cut)) > maxWidth) cut--;
-					lines.push(line.slice(0, cut));
-					line = line.slice(cut);
-				}
+				line = breakLong(next);
 			} else {
 				lines.push(line.trimEnd());
-				line = word.trimStart();
+				line = breakLong(word.trimStart());
 			}
 		}
 		lines.push(line.trimEnd());
