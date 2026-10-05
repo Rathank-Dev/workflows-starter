@@ -30,9 +30,20 @@ export interface GenerateInput {
 	jsonSchema: Record<string, unknown>;
 	/** A filled-in example reply, for DeepSeek's JSON mode */
 	example: string;
+	/** Running under `npm run dev` (changes which setup hints errors give) */
+	local?: boolean;
 }
 
-export type GenerateResult = { ok: true; value: unknown } | { ok: false; message: string; status: number; refusal?: boolean };
+export type GenerateResult =
+	| { ok: true; value: unknown }
+	| {
+			ok: false;
+			message: string;
+			status: number;
+			refusal?: boolean;
+			/** The provider generated (and charged for) output before this failed */
+			billable?: boolean;
+	  };
 
 const MAX_OUTPUT_TOKENS = 16000;
 
@@ -50,6 +61,33 @@ const LABEL: Record<AiProviderId, string> = {
 	deepseek: "DeepSeek",
 	"workers-ai": "Workers AI",
 };
+
+/**
+ * What the browser sees. Provider names and model ids stay on the server; the
+ * client only gets a neutral option id and label.
+ */
+const PUBLIC: Record<AiProviderId, { id: string; label: string }> = {
+	"workers-ai": { id: "fast", label: "Fast" },
+	google: { id: "balanced", label: "Balanced" },
+	anthropic: { id: "best", label: "Best quality" },
+	deepseek: { id: "economy", label: "Economy" },
+};
+
+export interface PublicAiOption {
+	id: string;
+	label: string;
+}
+
+/** Assistant options for the client, without provider or model details. */
+export function publicOptions(env: Env): PublicAiOption[] {
+	return availableProviders(env).map((p) => PUBLIC[p.id]);
+}
+
+/** The provider behind a public option id, or the first available one. */
+export function providerForOption(env: Env, optionId: string): AiProviderInfo | undefined {
+	const providers = availableProviders(env);
+	return providers.find((p) => PUBLIC[p.id].id === optionId) ?? providers[0];
+}
 
 const set = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 
@@ -85,32 +123,50 @@ export async function generate(provider: AiProviderInfo, env: Env, input: Genera
 		}
 	} catch (err) {
 		console.error(`${provider.label} request failed`, err);
+		// Unknown failures count as billable: some providers throw only after
+		// generating (Workers AI "JSON Mode couldn't be met", timeouts), and
+		// refunding those would let anyone loop on purpose-broken prompts.
+		// Refund only when no work can have happened.
+		const couldNotConnect = err instanceof TypeError; // fetch network failure
 		if (provider.id === "workers-ai") {
+			const text = err instanceof Error ? err.message : String(err);
+			if (/neuron|4006|daily free allocation|daily limit/i.test(text)) {
+				return { ok: false, status: 503, message: "Today's free AI capacity is used up. Try again after midnight UTC." };
+			}
 			return {
 				ok: false,
 				status: 503,
-				message:
-					"Workers AI didn't respond. In local development, set CLOUDFLARE_ACCOUNT_ID in .dev.vars and restart `npm run dev`.",
+				billable: !input.local && !couldNotConnect,
+				message: input.local
+					? "Workers AI didn't respond. In local development, set CLOUDFLARE_ACCOUNT_ID in .dev.vars and restart `npm run dev`."
+					: "The AI service didn't respond. Try again in a minute.",
 			};
 		}
-		return { ok: false, status: 502, message: `${provider.label} ran into a problem. Try again.` };
+		return { ok: false, status: 502, billable: !couldNotConnect, message: "The AI service ran into a problem. Try again." };
 	}
 }
 
+// Messages below reach the browser, so they never name the provider; the
+// provider is logged server-side instead.
 function httpFailure(label: string, status: number): GenerateResult {
+	console.error(`${label} returned HTTP ${status}`);
 	if (status === 401 || status === 403) {
-		return { ok: false, status: 503, message: `${label} rejected this server's API key. Check it in your settings.` };
+		return { ok: false, status: 503, message: "The AI service rejected this server's API key. The site owner needs to check it." };
 	}
-	if (status === 429) return { ok: false, status: 503, message: `${label} is busy or out of quota. Try again in a minute.` };
-	return { ok: false, status: 502, message: `${label} ran into a problem (HTTP ${status}). Try again.` };
+	if (status === 429) return { ok: false, status: 503, message: "The AI service is busy. Try again in a minute." };
+	return { ok: false, status: 502, message: "The AI service ran into a problem. Try again." };
 }
 
 function parseJson(text: string | undefined | null, label: string): GenerateResult {
-	if (!text || !text.trim()) return { ok: false, status: 502, message: `${label} sent an empty answer. Try again.` };
+	if (!text || !text.trim()) {
+		console.error(`${label} returned an empty answer`);
+		return { ok: false, status: 502, billable: true, message: "The AI service sent an empty answer. Try again." };
+	}
 	try {
 		return { ok: true, value: JSON.parse(text) };
 	} catch {
-		return { ok: false, status: 502, message: `${label}'s answer was cut off or malformed. Try a smaller request.` };
+		console.error(`${label} returned malformed JSON`);
+		return { ok: false, status: 502, billable: true, message: "The answer was cut off or malformed. Try a smaller request." };
 	}
 }
 
@@ -132,7 +188,7 @@ async function viaAnthropic(model: string, env: Env, input: GenerateInput): Prom
 			return { ok: false, status: 200, refusal: true, message: "I can't help with that request." };
 		}
 		if (response.parsed_output == null) {
-			return { ok: false, status: 502, message: "Claude's answer was cut off. Try a smaller request." };
+			return { ok: false, status: 502, billable: true, message: "The answer was cut off. Try a smaller request." };
 		}
 		return { ok: true, value: response.parsed_output };
 	} catch (err) {
@@ -140,6 +196,10 @@ async function viaAnthropic(model: string, env: Env, input: GenerateInput): Prom
 			return httpFailure("Claude", 401);
 		}
 		if (err instanceof Anthropic.RateLimitError) return httpFailure("Claude", 429);
+		// A timeout can still be billed if generation finishes after we give up
+		if (err instanceof Anthropic.APIConnectionTimeoutError) {
+			return { ok: false, status: 504, billable: true, message: "The AI service took too long. Try a smaller request." };
+		}
 		if (err instanceof Anthropic.APIError) return httpFailure("Claude", err.status ?? 502);
 		throw err;
 	}

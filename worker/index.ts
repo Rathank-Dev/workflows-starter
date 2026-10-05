@@ -1,6 +1,6 @@
 import { MAX_DOC_BYTES, parseBoard } from "../shared/board";
-import { handleAi } from "./ai";
-import { availableProviders } from "./ai-providers";
+import { DAILY_LIMIT, handleAi, remainingUses } from "./ai";
+import { publicOptions } from "./ai-providers";
 import { currentUser, enabledProviders, finishLogin, logout, startLogin } from "./auth";
 import { connect, type Sql } from "./db";
 import { SECURITY_HEADERS, error, json, randomHex, sameOrigin } from "./http";
@@ -104,9 +104,12 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		return json(
 			{
 				user: user && { id: user.id, name: user.name, avatarUrl: user.avatar_url },
+				// Assistant uses left today for the signed-in user
+				aiRemaining: user ? await remainingUses(db(), user.id) : null,
+				aiDailyLimit: DAILY_LIMIT,
 				providers: enabledProviders(env),
-				// Providers the assistant can use: [{ id, label, model }]
-				assistant: availableProviders(env),
+				// Assistant options as neutral ids/labels; provider and model stay server-side
+				assistant: publicOptions(env),
 			},
 			200,
 			{ "Cache-Control": "no-store" },
@@ -187,7 +190,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		if (await limited(env.AI_LIMITER, user.id)) {
 			return error("You're sending requests quickly. Wait a few seconds and try again.", 429, { "Retry-After": "10" });
 		}
-		return handleAi(request, env, db(), user);
+		return handleAi(request, env, db(), user, request.headers.get("CF-Connecting-IP") ?? "unknown");
 	}
 
 	if (path === "/ws") {

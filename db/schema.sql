@@ -43,3 +43,12 @@ create table if not exists ai_usage (
 	requests integer not null default 0,
 	primary key (user_id, day)
 );
+
+-- Per-network daily assistant count, so extra accounts on one network don't
+-- multiply the quota. ip_key is a salted SHA-256 of the client IP, never the IP.
+create table if not exists ai_ip_usage (
+	ip_key text not null,
+	day date not null,
+	requests integer not null default 0,
+	primary key (ip_key, day)
+);

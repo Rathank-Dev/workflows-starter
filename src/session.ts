@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 
 export type Provider = "github" | "google" | "discord";
 
+/** A neutral assistant option ("fast", "best", ...). The server keeps which AI it maps to. */
 export interface AssistantProvider {
-	id: "anthropic" | "google" | "deepseek" | "workers-ai";
+	id: string;
 	label: string;
-	model: string;
 }
 
 export interface SessionUser {
@@ -20,11 +20,14 @@ interface SessionState {
 	providers: Provider[];
 	/** AI providers the server is configured for; empty means the assistant is off */
 	assistant: AssistantProvider[];
+	/** Assistant uses left today for the signed-in user */
+	aiRemaining: number | null;
+	aiDailyLimit: number;
 }
 
 /** Who's signed in, which sign-in methods exist, and whether the assistant is on. */
 export function useSession() {
-	const [state, setState] = useState<SessionState>({ loading: true, user: null, providers: [], assistant: [] });
+	const [state, setState] = useState<SessionState>({ loading: true, user: null, providers: [], assistant: [], aiRemaining: null, aiDailyLimit: 3 });
 
 	useEffect(() => {
 		let cancelled = false;
@@ -37,6 +40,8 @@ export function useSession() {
 					user: d?.user ?? null,
 					providers: d?.providers ?? [],
 					assistant: Array.isArray(d?.assistant) ? d.assistant : [],
+					aiRemaining: typeof d?.aiRemaining === "number" ? d.aiRemaining : null,
+					aiDailyLimit: typeof d?.aiDailyLimit === "number" ? d.aiDailyLimit : 3,
 				});
 			})
 			.catch(() => !cancelled && setState((s) => ({ ...s, loading: false })));
