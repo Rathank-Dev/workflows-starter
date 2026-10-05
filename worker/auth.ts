@@ -7,7 +7,7 @@ const PROVIDERS: Provider[] = ["github", "google", "discord"];
 
 // __Host- cookies must be Secure, Path=/, and carry no Domain, so a sibling
 // subdomain can't plant or overwrite them.
-const SESSION_COOKIE = "__Host-lw_session";
+export const SESSION_COOKIE = "__Host-lw_session";
 const STATE_COOKIE = "__Host-lw_oauth";
 const SESSION_DAYS = 30;
 

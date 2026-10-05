@@ -92,6 +92,18 @@ export class BoardDO extends DurableObject<Env> {
 		return rev;
 	}
 
+	/** Disconnects everyone viewing (board moved to trash). Content is kept for restore. */
+	async disconnectAll(): Promise<void> {
+		for (const socket of this.ctx.getWebSockets()) {
+			try {
+				socket.send(JSON.stringify({ type: "deleted" }));
+				socket.close(4404, "Board moved to trash");
+			} catch {
+				// Already closed
+			}
+		}
+	}
+
 	/** Erases the board and disconnects everyone viewing it. */
 	async deleteBoard(): Promise<void> {
 		for (const socket of this.ctx.getWebSockets()) {

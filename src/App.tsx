@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Editor } from "./board/Editor";
+import { Dashboard } from "./dashboard/Dashboard";
+import { Profile } from "./dashboard/Profile";
 import { Landing } from "./landing/Landing";
 import { useSession } from "./session";
 
@@ -47,8 +49,17 @@ function BoardApp() {
 	);
 }
 
+function SessionPage({ page }: { page: "dashboard" | "profile" }) {
+	const session = useSession();
+	return page === "dashboard" ? <Dashboard session={session} /> : <Profile session={session} />;
+}
+
 function App() {
-	return isBoardRoute() ? <BoardApp /> : <Landing />;
+	const path = window.location.pathname.replace(/\/+$/, "");
+	if (isBoardRoute()) return <BoardApp />;
+	if (path === "/dashboard") return <SessionPage page="dashboard" />;
+	if (path === "/profile") return <SessionPage page="profile" />;
+	return <Landing />;
 }
 
 export default App;

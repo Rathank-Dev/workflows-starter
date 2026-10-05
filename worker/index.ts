@@ -2,6 +2,15 @@ import { MAX_DOC_BYTES, parseBoard } from "../shared/board";
 import { DAILY_LIMIT, handleAi, remainingUses } from "./ai";
 import { publicOptions } from "./ai-providers";
 import { currentUser, enabledProviders, finishLogin, logout, startLogin } from "./auth";
+import {
+	deleteAccount,
+	getProfile,
+	listDashboard,
+	logoutEverywhere,
+	restoreBoard,
+	setStar,
+	trashBoard,
+} from "./dashboard";
 import { connect, type Sql } from "./db";
 import { SECURITY_HEADERS, error, json, randomHex, sameOrigin } from "./http";
 
@@ -98,6 +107,34 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 	if (path === "/auth/logout" && method === "POST") {
 		return logout(request, db());
 	}
+	if (path === "/auth/logout-all" && method === "POST") {
+		const user = await currentUser(request, db());
+		return user ? logoutEverywhere(db(), user) : error("Sign in first.", 401);
+	}
+
+	if (path === "/api/dashboard" && method === "GET") {
+		const user = await currentUser(request, db());
+		return user ? listDashboard(db(), env, user) : error("Sign in to see your dashboard.", 401);
+	}
+	if (path === "/api/profile" && method === "GET") {
+		const user = await currentUser(request, db());
+		return user ? getProfile(db(), user) : error("Sign in to see your profile.", 401);
+	}
+	if (path === "/api/account" && method === "DELETE") {
+		const user = await currentUser(request, db());
+		return user ? deleteAccount(request, db(), env, user) : error("Sign in first.", 401);
+	}
+
+	// Board actions: /api/boards/:id/star | trash | restore
+	const action = path.match(/^\/api\/boards\/([a-f0-9]{32})\/(star|trash|restore)$/);
+	if (action && method === "POST") {
+		const user = await currentUser(request, db());
+		if (!user) return error("Sign in first.", 401);
+		const [, id, verb] = action;
+		if (verb === "star") return setStar(request, db(), user, id);
+		if (verb === "trash") return trashBoard(db(), env, user, id);
+		return restoreBoard(db(), user, id);
+	}
 
 	if (path === "/api/me" && method === "GET") {
 		const user = await currentUser(request, db());
@@ -122,7 +159,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 
 		if (method === "GET") {
 			const boards = await db()<{ id: string; name: string; updated_at: Date }[]>`
-				select id, name, updated_at from boards where owner_id = ${user.id}
+				select id, name, updated_at from boards where owner_id = ${user.id} and deleted_at is null
 				order by updated_at desc limit 200
 			`;
 			return json({ boards });
@@ -199,10 +236,18 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		if (request.headers.get("Upgrade") !== "websocket") {
 			return new Response("Expected Upgrade: websocket", { status: 426 });
 		}
-		// Only boards someone signed in to create can be opened live.
-		const [row] = await db()`select 1 from boards where id = ${id}`;
+		// Only boards someone signed in to create, and not in the trash, open live.
+		const [row] = await db()`select 1 from boards where id = ${id} and deleted_at is null`;
 		if (!row) return new Response("Board not found", { status: 404 });
 		await db()`update boards set updated_at = now() where id = ${id}`;
+		// Remember it for the signed-in visitor's Recent and "Shared with me"
+		const visitor = await currentUser(request, db());
+		if (visitor) {
+			await db()`
+				insert into board_visits (user_id, board_id) values (${visitor.id}, ${id})
+				on conflict (user_id, board_id) do update set last_opened_at = now()
+			`;
+		}
 		return env.BOARD.get(env.BOARD.idFromName(id)).fetch(request);
 	}
 

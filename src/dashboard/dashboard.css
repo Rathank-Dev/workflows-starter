@@ -1,0 +1,748 @@
+/* Dashboard and profile. Uses the editor's tokens from index.css (light and dark). */
+
+.dash {
+	display: grid;
+	grid-template-columns: 260px minmax(0, 1fr);
+	min-height: 100vh;
+	background: var(--chrome);
+	color: var(--ink);
+}
+
+.dash-loading {
+	background: var(--canvas);
+}
+
+/* ─── Sidebar ─────────────────────────────────── */
+
+.dash-side {
+	position: sticky;
+	top: 0;
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 18px 14px;
+	border-right: 1px solid var(--chrome-line);
+	background: var(--canvas);
+	overflow-y: auto;
+}
+
+.dash-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	padding: 2px 6px;
+	color: var(--ink);
+	text-decoration: none;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 19px;
+	letter-spacing: -0.02em;
+}
+
+.dash-search {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 10px;
+	height: 38px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 9px;
+	background: var(--chrome);
+	color: var(--ink-soft);
+}
+
+.dash-search:focus-within {
+	border-color: var(--select);
+}
+
+.dash-search input {
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	outline: none;
+	background: transparent;
+	color: var(--ink);
+	font: inherit;
+}
+
+.dash-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.dash-nav button {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	height: 38px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 8px;
+	background: none;
+	color: var(--ink);
+	font: inherit;
+	font-weight: 500;
+	text-align: left;
+	cursor: pointer;
+}
+
+.dash-nav button:hover {
+	background: var(--chrome-hover);
+}
+
+.dash-nav button[data-active] {
+	background: var(--select-soft);
+	color: var(--select);
+}
+
+.dash-count {
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	color: var(--ink-soft);
+}
+
+.dash-local {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 10px 12px;
+	border: 1px dashed var(--chrome-line);
+	border-radius: 9px;
+	color: var(--ink);
+	text-decoration: none;
+	font-weight: 500;
+}
+
+.dash-local span {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--ink-soft);
+}
+
+.dash-local:hover {
+	border-color: var(--select);
+}
+
+.dash-plan {
+	margin-top: auto;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 14px;
+	border-radius: 10px;
+	background: var(--chrome);
+	border: 1px solid var(--chrome-line);
+	font-size: 13px;
+}
+
+.dash-plan span {
+	color: var(--ink-soft);
+}
+
+.soon {
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: var(--select-soft);
+	color: var(--select);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+/* ─── Main ────────────────────────────────────── */
+
+.dash-main {
+	min-width: 0;
+	padding: 0 32px 48px;
+}
+
+.dash-top {
+	position: sticky;
+	top: 0;
+	z-index: 15;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 64px;
+	background: var(--chrome);
+	border-bottom: 1px solid var(--chrome-line);
+	margin: 0 -32px 24px;
+	padding: 0 32px;
+}
+
+.dash-plan-badge {
+	padding: 4px 10px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--ink-soft);
+}
+
+.dash-top-right {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.dash-top-right .primary-btn {
+	gap: 6px;
+	padding-left: 10px;
+}
+
+.dash-top-right .primary-btn svg {
+	width: 18px;
+	height: 18px;
+}
+
+.dash-top .account-menu {
+	top: calc(100% + 8px);
+}
+
+/* Templates */
+.dash-templates {
+	padding: 18px;
+	border-radius: 14px;
+	background: var(--canvas);
+	margin-bottom: 32px;
+}
+
+.dash-templates h2 {
+	margin: 0 0 14px;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.dash-template-row {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 148px;
+	gap: 14px;
+	overflow-x: auto;
+	padding-bottom: 4px;
+}
+
+.dash-template {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--ink);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 500;
+	text-align: left;
+	cursor: pointer;
+}
+
+.dash-template:disabled {
+	cursor: progress;
+	opacity: 0.7;
+}
+
+.dash-template-thumb {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 96px;
+	padding: 6px;
+	border-radius: 10px;
+	background: #fff;
+	border: 1px solid var(--chrome-line);
+	overflow: hidden;
+	transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.dash-template-thumb svg {
+	height: 100%;
+	width: auto;
+	max-width: 100%;
+}
+
+.dash-template:hover .dash-template-thumb,
+.dash-template:focus-visible .dash-template-thumb {
+	border-color: var(--select);
+	box-shadow: 0 0 0 3px var(--select-soft);
+}
+
+.dash-blank {
+	color: var(--ink-soft);
+}
+
+.dash-blank svg {
+	width: 28px;
+	height: 28px;
+}
+
+/* Boards table */
+.dash-boards-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.dash-boards-head h1 {
+	margin: 0;
+	font-family: var(--font-display);
+	font-size: 26px;
+	letter-spacing: -0.02em;
+}
+
+.dash-filters {
+	display: flex;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+
+.dash-filters label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	color: var(--ink-soft);
+}
+
+.dash-filters select {
+	height: 34px;
+	padding: 0 8px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 8px;
+	background: var(--chrome);
+	color: var(--ink);
+	font: inherit;
+	cursor: pointer;
+}
+
+.dash-note {
+	margin: 4px 0 12px;
+	color: var(--ink-soft);
+	font-size: 14px;
+}
+
+.dash-error {
+	color: var(--danger);
+}
+
+.dash-empty {
+	padding: 48px 16px;
+	border: 1px dashed var(--chrome-line);
+	border-radius: 12px;
+	text-align: center;
+	color: var(--ink-soft);
+}
+
+.dash-empty p {
+	margin: 4px 0;
+}
+
+.dash-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+.dash-table th {
+	text-align: left;
+	font-weight: 500;
+	font-size: 13px;
+	color: var(--ink-soft);
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--chrome-line);
+}
+
+.dash-table td {
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--chrome-line);
+	vertical-align: middle;
+}
+
+.dash-table tbody tr:hover {
+	background: var(--canvas);
+}
+
+.col-star {
+	width: 40px;
+	padding-right: 0 !important;
+}
+
+.col-actions {
+	width: 48px;
+	text-align: right;
+}
+
+.star-btn {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--ink-soft);
+	cursor: pointer;
+}
+
+.star-btn[aria-pressed="true"] {
+	color: #e0a100;
+}
+
+.star-btn:hover {
+	background: var(--chrome-hover);
+}
+
+.board-name-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.board-name-cell strong {
+	font-weight: 600;
+}
+
+.board-name-cell span {
+	font-size: 12.5px;
+	color: var(--ink-soft);
+}
+
+a.board-name-cell:hover strong {
+	color: var(--select);
+}
+
+.row-menu {
+	position: relative;
+	display: inline-block;
+}
+
+.row-menu-list {
+	top: calc(100% + 4px);
+	right: 0;
+	min-width: 180px;
+	z-index: 30;
+}
+
+.menu a {
+	display: block;
+	padding: 8px 10px;
+	border-radius: 6px;
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.menu a:hover,
+.menu a:focus-visible {
+	background: var(--chrome-hover);
+}
+
+.menu [data-danger] {
+	color: var(--danger);
+}
+
+/* Avatar menu (shared with the editor) */
+.account-menu-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 2px 2px 6px;
+	padding: 8px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 8px;
+	font-weight: 600;
+}
+
+.account-menu-head .avatar {
+	width: 28px;
+	height: 28px;
+	font-size: 12px;
+}
+
+.avatar {
+	display: inline-grid;
+	place-items: center;
+	width: 100%;
+	height: 100%;
+	border-radius: 50%;
+	object-fit: cover;
+	flex: none;
+}
+
+.avatar-initial {
+	background: var(--select-soft);
+	color: var(--select);
+	font-weight: 650;
+}
+
+.text-link {
+	color: var(--select);
+	font-weight: 500;
+	text-decoration: none;
+}
+
+.text-link:hover {
+	text-decoration: underline;
+}
+
+/* ─── Signed out ──────────────────────────────── */
+
+.dash-signed-out {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 24px 16px;
+	background: var(--canvas);
+}
+
+.dash-signed-out .dash-brand {
+	align-self: flex-start;
+}
+
+.dash-signin-card {
+	position: relative;
+	width: min(420px, 100%);
+	margin-top: 12vh;
+	padding: 28px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.dash-signin-card h1 {
+	margin: 0;
+	font-family: var(--font-display);
+	font-size: 24px;
+	letter-spacing: -0.02em;
+}
+
+.dash-signin-card p {
+	margin: 0;
+	color: var(--ink-soft);
+}
+
+/* ─── Profile ─────────────────────────────────── */
+
+.profile-page {
+	min-height: 100vh;
+	background: var(--canvas);
+	color: var(--ink);
+}
+
+.profile-top {
+	position: sticky;
+	top: 0;
+	z-index: 15;
+	display: flex;
+	align-items: center;
+	gap: 20px;
+	height: 64px;
+	padding: 0 24px;
+	background: var(--chrome);
+	border-bottom: 1px solid var(--chrome-line);
+}
+
+.profile-top .account {
+	margin-left: auto;
+}
+
+.profile-top .account-menu {
+	top: calc(100% + 8px);
+}
+
+.profile-main {
+	width: min(720px, 100%);
+	margin: 0 auto;
+	padding: 28px 16px 64px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.profile-card {
+	position: relative;
+	padding: 22px 24px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.profile-card h2 {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 650;
+}
+
+.profile-hero {
+	flex-direction: row;
+	align-items: center;
+	gap: 18px;
+}
+
+.profile-hero h1 {
+	margin: 0 0 2px;
+	font-family: var(--font-display);
+	font-size: 24px;
+	letter-spacing: -0.02em;
+}
+
+.profile-hero p {
+	margin: 0;
+}
+
+.profile-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.profile-list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--chrome-line);
+}
+
+.profile-list li:last-child {
+	border-bottom: 0;
+}
+
+.muted {
+	color: var(--ink-soft);
+}
+
+.small {
+	font-size: 13px;
+	margin: 0;
+}
+
+.pill {
+	padding: 2px 10px;
+	border-radius: 999px;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+
+.pill-on {
+	background: color-mix(in srgb, #2e9455 16%, transparent);
+	color: #2e9455;
+}
+
+.profile-upgrade {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 14px;
+	border-radius: 10px;
+	background: var(--select-soft);
+}
+
+.profile-upgrade p {
+	margin: 2px 0 0;
+}
+
+.profile-danger {
+	border-color: color-mix(in srgb, var(--danger) 35%, var(--chrome-line));
+}
+
+.profile-danger h2 {
+	color: var(--danger);
+}
+
+.profile-confirm {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 13px;
+}
+
+.profile-confirm input {
+	width: min(260px, 100%);
+	height: 36px;
+	padding: 0 10px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 8px;
+	background: var(--chrome);
+	color: var(--ink);
+	font: inherit;
+}
+
+.danger-btn {
+	align-self: flex-start;
+	height: 36px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--danger);
+	color: #fff;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.danger-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+/* ─── Small screens ───────────────────────────── */
+
+@media (max-width: 860px) {
+	.dash {
+		grid-template-columns: 1fr;
+	}
+
+	.dash-side {
+		position: static;
+		height: auto;
+		border-right: 0;
+		border-bottom: 1px solid var(--chrome-line);
+	}
+
+	.dash-nav {
+		flex-direction: row;
+		overflow-x: auto;
+	}
+
+	.dash-nav button {
+		flex: none;
+		gap: 8px;
+	}
+
+	.dash-local,
+	.dash-plan {
+		display: none;
+	}
+
+	.dash-main {
+		padding: 0 16px 40px;
+	}
+
+	.dash-top {
+		margin: 0 -16px 20px;
+		padding: 0 16px;
+	}
+
+	.dash-table th:nth-child(4),
+	.dash-table td:nth-child(4) {
+		display: none;
+	}
+
+	.profile-top .text-link {
+		display: none;
+	}
+}
+
+/* Buttons in profile cards keep their natural width */
+.profile-card > .ghost-btn {
+	align-self: flex-start;
+}

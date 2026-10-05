@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PROVIDER_LABEL, signInUrl, type Session } from "../session";
-import { Icons } from "./icons";
 
 function Dialog({
 	title,
@@ -109,22 +108,19 @@ export function ShareDialog({ link, onClose, onCopied }: { link: string; onClose
 	);
 }
 
-export function AccountButton({
-	session,
-	onSignIn,
-	onBoards,
-}: {
-	session: Session;
-	onSignIn: () => void;
-	onBoards: () => void;
-}) {
+export function AccountButton({ session, onSignIn }: { session: Session; onSignIn: () => void }) {
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (!open) return;
 		const close = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
 		window.addEventListener("pointerdown", close);
-		return () => window.removeEventListener("pointerdown", close);
+		window.addEventListener("keydown", onKey);
+		return () => {
+			window.removeEventListener("pointerdown", close);
+			window.removeEventListener("keydown", onKey);
+		};
 	}, [open]);
 
 	if (session.loading) return null;
@@ -143,37 +139,40 @@ export function AccountButton({
 				className="avatar-btn"
 				aria-label={`Account: ${user.name}`}
 				aria-expanded={open}
+				aria-haspopup="menu"
 				onClick={() => setOpen((o) => !o)}
 			>
-				{user.avatarUrl ? (
-					<img src={user.avatarUrl} alt="" referrerPolicy="no-referrer" />
-				) : (
-					<span>{user.name.slice(0, 1).toUpperCase()}</span>
-				)}
+				<Avatar user={user} />
 			</button>
 			{open && (
 				<div className="panel menu account-menu" role="menu">
-					<p className="menu-label">{user.name}</p>
-					<button
-						type="button"
-						role="menuitem"
-						onClick={() => {
-							setOpen(false);
-							onBoards();
-						}}
-					>
-						Your shared boards
-					</button>
+					<div className="account-menu-head">
+						<Avatar user={user} />
+						<span>{user.name}</span>
+					</div>
+					<a role="menuitem" href="/dashboard">
+						Dashboard
+					</a>
+					<a role="menuitem" href="/profile">
+						Profile
+					</a>
+					<a role="menuitem" href="/dashboard?view=trash">
+						Trash
+					</a>
 					<div className="menu-sep" />
+					<a role="menuitem" href="/profile#plan">
+						Upgrade <span className="soon">Soon</span>
+					</a>
 					<button
 						type="button"
 						role="menuitem"
-						onClick={() => {
+						onClick={async () => {
 							setOpen(false);
-							session.signOut();
+							await session.signOut();
+							window.location.assign("/");
 						}}
 					>
-						Sign out
+						Log out
 					</button>
 				</div>
 			)}
@@ -181,56 +180,13 @@ export function AccountButton({
 	);
 }
 
-interface BoardRow {
-	id: string;
-	name: string;
-	updated_at: string;
-}
-
-export function BoardsPanel({ onClose, currentId }: { onClose: () => void; currentId: string | null }) {
-	const [boards, setBoards] = useState<BoardRow[] | null>(null);
-	const [failed, setFailed] = useState(false);
-
-	useEffect(() => {
-		fetch("/api/boards")
-			.then((r) => (r.ok ? r.json() : Promise.reject()))
-			.then((d: { boards: BoardRow[] }) => setBoards(d.boards))
-			.catch(() => setFailed(true));
-	}, []);
-
-	const remove = async (b: BoardRow) => {
-		if (!window.confirm(`Delete “${b.name}” for everyone? This can't be undone.`)) return;
-		const res = await fetch(`/api/boards/${b.id}`, { method: "DELETE" });
-		if (res.ok) {
-			setBoards((list) => list?.filter((x) => x.id !== b.id) ?? null);
-			if (b.id === currentId) window.location.assign("/board");
-		}
-	};
-
-	return (
-		<Dialog title="Your shared boards" labelledBy="boards-title" onClose={onClose}>
-			{failed && <p className="dialog-note">Couldn't load your boards. Check your connection and try again.</p>}
-			{!failed && boards === null && <p className="dialog-note">Loading…</p>}
-			{boards?.length === 0 && (
-				<p className="dialog-text">You haven't shared a board yet. Use Share on any board to create a link.</p>
-			)}
-			{boards && boards.length > 0 && (
-				<ul className="board-list">
-					{boards.map((b) => (
-						<li key={b.id} data-current={b.id === currentId || undefined}>
-							<a href={`/board?board=${b.id}`}>
-								<span className="board-list-name">{b.name}</span>
-								<span className="board-list-date">
-									{new Date(b.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-								</span>
-							</a>
-							<button type="button" className="icon-btn" aria-label={`Delete ${b.name}`} onClick={() => remove(b)}>
-								<Icons.trash />
-							</button>
-						</li>
-					))}
-				</ul>
-			)}
-		</Dialog>
+export function Avatar({ user, size }: { user: { name: string; avatarUrl: string | null }; size?: number }) {
+	const style = size ? { width: size, height: size, fontSize: size * 0.42 } : undefined;
+	return user.avatarUrl ? (
+		<img className="avatar" src={user.avatarUrl} alt="" referrerPolicy="no-referrer" style={style} />
+	) : (
+		<span className="avatar avatar-initial" style={style} aria-hidden="true">
+			{user.name.slice(0, 1).toUpperCase()}
+		</span>
 	);
 }
