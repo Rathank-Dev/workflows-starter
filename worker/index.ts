@@ -66,8 +66,12 @@ export default {
 
 		if (request.method !== "GET" && request.method !== "HEAD") {
 			if (!sameOrigin(request)) return error("Cross-site request blocked.", 403);
-			// Refuse oversized bodies before anything buffers them
-			const length = Number(request.headers.get("Content-Length") ?? "0");
+			// Refuse oversized bodies before anything buffers them. A body without a
+			// declared length (chunked upload) can't be checked up front, so refuse it;
+			// browsers always send Content-Length for this app's requests.
+			const declared = request.headers.get("Content-Length");
+			if (request.body !== null && declared === null) return error("Send a Content-Length header.", 411);
+			const length = Number(declared ?? "0");
 			if (!Number.isFinite(length) || length > MAX_BODY_BYTES) return error("Request is too large.", 413);
 		}
 

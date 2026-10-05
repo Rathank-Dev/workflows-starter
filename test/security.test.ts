@@ -69,6 +69,21 @@ describe("Worker security", () => {
 		}
 	});
 
+	it("refuses bodies without a declared length (chunked uploads)", async () => {
+		const stream = new ReadableStream({
+			start(c) {
+				c.enqueue(new TextEncoder().encode("x".repeat(1000)));
+				c.close();
+			},
+		});
+		const res = await SELF.fetch(`${ORIGIN}/api/boards`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, "CF-Connecting-IP": "10.0.0.8" },
+			body: stream,
+		});
+		expect(res.status).toBe(411);
+	});
+
 	it("doesn't start sign-in for providers that aren't configured", async () => {
 		const res = await SELF.fetch(`${ORIGIN}/auth/login/github?returnTo=//evil.com`, {
 			headers: { "CF-Connecting-IP": "10.0.0.5" },
@@ -85,14 +100,36 @@ describe("BoardDO connection cap", () => {
 		const stub = env.BOARD.get(env.BOARD.idFromName(`cap-${Date.now()}`));
 		const open: WebSocket[] = [];
 		for (let i = 0; i < MAX_CONNECTIONS; i++) {
-			const res = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket" } });
+			// Spread across addresses so the per-IP limit doesn't trigger first
+			const ip = `10.1.${Math.floor(i / 5)}.${i % 5}`;
+			const res = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } });
 			expect(res.status).toBe(101);
 			res.webSocket!.accept();
 			open.push(res.webSocket!);
 		}
-		const over = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket" } });
+		const over = await stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": "10.2.0.1" } });
 		expect(over.status).toBe(429);
-		for (const ws of open) ws.close();
+		for (const ws of open) ws.close(1000);
+	});
+
+	it("limits sockets per IP so one person can't take every slot", async () => {
+		const { env } = await import("cloudflare:test");
+		const { MAX_CONNECTIONS_PER_IP } = await import("../worker/board-do");
+		const stub = env.BOARD.get(env.BOARD.idFromName(`ipcap-${Date.now()}`));
+		const open: WebSocket[] = [];
+		const connect = (ip: string) => stub.fetch("https://do/ws", { headers: { Upgrade: "websocket", "CF-Connecting-IP": ip } });
+		for (let i = 0; i < MAX_CONNECTIONS_PER_IP; i++) {
+			const res = await connect("10.3.0.1");
+			expect(res.status).toBe(101);
+			res.webSocket!.accept();
+			open.push(res.webSocket!);
+		}
+		expect((await connect("10.3.0.1")).status).toBe(429);
+		const other = await connect("10.3.0.2");
+		expect(other.status).toBe(101);
+		other.webSocket!.accept();
+		open.push(other.webSocket!);
+		for (const ws of open) ws.close(1000);
 	});
 });
 

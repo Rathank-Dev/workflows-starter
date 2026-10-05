@@ -15,6 +15,11 @@ const WRITE_RATE = 10;
 const WRITE_BURST = 30;
 /** Open sockets allowed per board; each save is re-sent to all of them. */
 export const MAX_CONNECTIONS = 50;
+/**
+ * Per IP address, so one person can't take every slot. High enough for a
+ * team sharing an office network.
+ */
+export const MAX_CONNECTIONS_PER_IP = 10;
 
 export class BoardDO extends DurableObject<Env> {
 	private sql: SqlStorage;
@@ -51,9 +56,14 @@ export class BoardDO extends DurableObject<Env> {
 		if (this.ctx.getWebSockets().length >= MAX_CONNECTIONS) {
 			return new Response("This board has too many open connections.", { status: 429 });
 		}
+		// The Worker forwards the original request, so Cloudflare's client IP header is intact
+		const ipTag = `ip:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`.slice(0, 200);
+		if (this.ctx.getWebSockets(ipTag).length >= MAX_CONNECTIONS_PER_IP) {
+			return new Response("Too many open connections to this board from your network.", { status: 429 });
+		}
 		const pair = new WebSocketPair();
 		const [client, server] = Object.values(pair);
-		this.ctx.acceptWebSocket(server);
+		this.ctx.acceptWebSocket(server, [ipTag]);
 
 		const { doc, rev } = this.read();
 		server.send(JSON.stringify({ type: "doc", doc, rev }));
