@@ -1,4 +1,4 @@
-/* Homepage. Flow-color system: tokens live in index.css. Scoped under .fy. */
+/* Homepage. Tokens, fonts, and the heading accent live in index.css. Scoped under .fy. */
 
 .fy {
 	--max: 1180px;
@@ -8,7 +8,32 @@
 	color: var(--ink);
 	font-family: var(--font-ui);
 	font-size: 16px;
-	line-height: 1.55;
+	line-height: 1.6;
+}
+
+.fy-eyebrow {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 28px;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	letter-spacing: 0.32em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+}
+
+.fy-eyebrow-rule {
+	width: 20px;
+	height: 1px;
+	background: var(--ink-soft);
+}
+
+.fy-eyebrow-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--teal);
 }
 
 html:has(.fy) {
@@ -32,8 +57,8 @@ html:has(.fy) {
 .fy h1,
 .fy h2 {
 	font-family: var(--font-display);
-	font-weight: 700;
-	letter-spacing: -0.025em;
+	font-weight: 300;
+	letter-spacing: -0.02em;
 	margin: 0;
 }
 
@@ -63,19 +88,22 @@ html:has(.fy) {
 	align-items: center;
 	justify-content: center;
 	height: 40px;
-	padding: 0 16px;
-	border-radius: 10px;
-	font-weight: 600;
-	font-size: 15px;
+	padding: 0 20px;
+	border-radius: 0;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 12px;
+	letter-spacing: 0.28em;
+	text-transform: uppercase;
 	text-decoration: none;
 	white-space: nowrap;
 	transition: background 0.12s, border-color 0.12s;
 }
 
 .fy-btn-large {
-	height: 48px;
-	padding: 0 22px;
-	font-size: 16px;
+	height: 52px;
+	padding: 0 32px;
+	font-size: 12.5px;
 }
 
 .fy-btn-primary {
@@ -87,14 +115,22 @@ html:has(.fy) {
 	filter: brightness(1.15);
 }
 
-.fy-btn-quiet {
-	color: var(--ink);
-	border: 1px solid var(--chrome-line);
-	background: var(--chrome);
+.fy-btn-outline {
+	color: var(--teal);
+	border: 1px solid var(--teal);
 }
 
-.fy-btn-quiet:hover {
-	border-color: var(--ink-soft);
+.fy-btn-outline:hover {
+	background: rgb(20 180 210 / 0.1);
+}
+
+.fy-btn-link {
+	color: var(--ink);
+	padding-inline: 8px;
+}
+
+.fy-btn-link:hover {
+	color: var(--teal);
 }
 
 /* ─── Nav ─────────────────────────────────────── */
@@ -103,7 +139,7 @@ html:has(.fy) {
 	display: flex;
 	align-items: center;
 	gap: 28px;
-	height: 72px;
+	height: 76px;
 }
 
 .fy-brand {
@@ -113,20 +149,28 @@ html:has(.fy) {
 	color: var(--ink);
 	text-decoration: none;
 	font-family: var(--font-display);
-	font-weight: 700;
+	font-weight: 500;
 	font-size: 20px;
-	letter-spacing: -0.02em;
+	letter-spacing: -0.01em;
+}
+
+.fy-brand svg {
+	color: var(--teal);
 }
 
 .fy-links {
 	display: flex;
-	gap: 22px;
+	gap: 32px;
+	margin-inline: auto;
 }
 
 .fy-links a {
 	color: var(--ink-soft);
 	text-decoration: none;
-	font-weight: 500;
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
 }
 
 .fy-links a:hover {
@@ -134,46 +178,73 @@ html:has(.fy) {
 }
 
 .fy-nav-actions {
-	margin-left: auto;
 	display: flex;
-	gap: 10px;
+	align-items: center;
+	gap: 14px;
+}
+
+/* Nav sits on a full-width hairline, like a drawing sheet's title block */
+.fy > header {
+	border-bottom: 1px solid var(--chrome-line);
 }
 
 /* ─── Hero ────────────────────────────────────── */
 
+/* Full-width hero with a faint drafting grid and a teal glow, fading out at the bottom */
+.fy main > .fy-hero {
+	position: relative;
+	max-width: none;
+	padding-inline: max(var(--gutter), calc((100% - var(--max)) / 2 + var(--gutter)));
+	isolation: isolate;
+}
+
+.fy-hero::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background:
+		radial-gradient(560px 420px at 86% 30%, rgb(20 180 210 / 0.12), transparent 70%),
+		linear-gradient(var(--chrome-line) 1px, transparent 1px),
+		linear-gradient(90deg, var(--chrome-line) 1px, transparent 1px);
+	background-size: auto, 56px 56px, 56px 56px;
+	opacity: 0.6;
+	mask-image: linear-gradient(black 40%, transparent);
+}
+
 .fy-hero {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+	grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
 	gap: clamp(28px, 5vw, 72px);
 	align-items: center;
 	padding-block: clamp(40px, 8vh, 96px) clamp(56px, 9vh, 112px);
 }
 
 .fy-hero h1 {
-	font-size: clamp(40px, 5.2vw, 68px);
-	line-height: 1.02;
-	letter-spacing: -0.035em;
-	max-width: 14ch;
-	text-wrap: balance;
+	font-size: clamp(42px, 5.4vw, 80px);
+	line-height: 1.04;
+	letter-spacing: -0.025em;
 }
 
-.fy-hero-copy > p:not(.fy-fineprint) {
+.fy-hero-copy > p:not(.fy-fineprint, .fy-eyebrow) {
 	margin: 22px 0 0;
 	max-width: 46ch;
 	color: var(--ink-soft);
 	font-size: 18px;
+	line-height: 1.75;
 }
 
 .fy-actions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 12px;
-	margin-top: 30px;
+	align-items: center;
+	gap: 16px;
+	margin-top: 40px;
 }
 
 .hero-board {
 	padding: 18px;
-	border-radius: 18px;
+	border-radius: 4px;
 	background: var(--chrome);
 	border: 1px solid var(--chrome-line);
 	box-shadow: var(--shadow);
@@ -229,6 +300,7 @@ html:has(.fy) {
 
 .fy-meaning-list strong {
 	margin-top: 6px;
+	font-weight: 500;
 	font-size: 16px;
 }
 
@@ -312,8 +384,8 @@ html:has(.fy) {
 	height: 240px;
 	margin-bottom: 10px;
 	padding: 14px;
-	border-radius: 14px;
-	background: #fff;
+	border-radius: 4px;
+	background: var(--chrome);
 	border: 1px solid var(--chrome-line);
 	overflow: hidden;
 	transition: border-color 0.12s;
@@ -331,6 +403,7 @@ html:has(.fy) {
 }
 
 .fy-template strong {
+	font-weight: 500;
 	font-size: 17px;
 }
 
@@ -355,7 +428,7 @@ html:has(.fy) {
 	flex-direction: column;
 	gap: 10px;
 	padding: 20px;
-	border-radius: 18px;
+	border-radius: 4px;
 	background: var(--chrome);
 	border: 1px solid var(--chrome-line);
 }
@@ -378,7 +451,7 @@ html:has(.fy) {
 /* The assistant speaks in check-purple: it is the thing that verifies and draws */
 .fy-bubble-ai {
 	align-self: flex-start;
-	background: var(--check-fill);
+	background: #222b37;
 	color: var(--ink);
 	border-bottom-left-radius: 4px;
 }
@@ -389,9 +462,9 @@ html:has(.fy) {
 	height: 220px;
 	margin-top: 6px;
 	padding: 12px;
-	border-radius: 12px;
-	background: #fff;
-	border: 1px dashed var(--check);
+	border-radius: 4px;
+	background: var(--canvas);
+	border: 1px dashed var(--teal);
 }
 
 .fy-chat-result svg {
@@ -421,24 +494,20 @@ html:has(.fy) {
 	flex-direction: column;
 	gap: 6px;
 	padding: 18px 20px;
-	border: 1.5px solid var(--step);
-	border-radius: 12px;
-	background: var(--step-fill);
-}
-
-.fy-how-flow li:last-child {
-	border-color: var(--pass);
-	background: var(--pass-fill);
+	border: 1px solid var(--chrome-line);
+	border-top: 2px solid var(--teal);
+	border-radius: 0;
+	background: var(--chrome);
 }
 
 .fy-how-flow strong {
 	font-family: var(--font-display);
-	font-size: 20px;
+	font-weight: 400;
+	font-size: 22px;
 }
 
 .fy-how-flow span {
-	color: var(--ink);
-	opacity: 0.8;
+	color: var(--ink-soft);
 	font-size: 15px;
 }
 
@@ -554,9 +623,19 @@ html:has(.fy) {
 	}
 }
 
+@media (max-width: 860px) {
+	.fy-links {
+		display: none;
+	}
+
+	.fy-nav-actions {
+		margin-left: auto;
+	}
+}
+
 @media (max-width: 640px) {
 	.fy-links,
-	.fy-nav-actions .fy-btn-quiet {
+	.fy-nav-actions .fy-btn-link {
 		display: none;
 	}
 
@@ -580,5 +659,12 @@ html:has(.fy) {
 @media (prefers-reduced-motion: reduce) {
 	html:has(.fy) {
 		scroll-behavior: auto;
+	}
+}
+
+@media (max-width: 480px) {
+	.fy-eyebrow {
+		letter-spacing: 0.2em;
+		font-size: 11px;
 	}
 }

@@ -30,6 +30,17 @@ const VIEW_TITLE: Record<View, string> = {
 	trash: "Trash",
 };
 
+/** Page headings set their last word in the teal accent face. */
+function Accented({ text }: { text: string }) {
+	const i = text.lastIndexOf(" ");
+	return i < 0 ? <em>{text}</em> : (
+		<>
+			{text.slice(0, i + 1)}
+			<em>{text.slice(i + 1)}</em>
+		</>
+	);
+}
+
 function viewFromUrl(): View {
 	const v = new URLSearchParams(window.location.search).get("view");
 	return v === "recent" || v === "starred" || v === "trash" ? v : "home";
@@ -234,7 +245,9 @@ export function Dashboard({ session }: { session: Session }) {
 							Changed your mind? Sign in before then to keep it and get your boards back.
 						</p>
 					)}
-					<h1>Sign in to your dashboard</h1>
+					<h1>
+						Sign in to your <em>dashboard.</em>
+					</h1>
 					<p>See your shared boards, starred flows, and trash in one place.</p>
 					{session.providers.length === 0 ? (
 						<p className="dialog-note">Sign-in isn't set up on this server yet.</p>
@@ -333,7 +346,9 @@ export function Dashboard({ session }: { session: Session }) {
 
 				<section className="dash-boards" aria-label={VIEW_TITLE[view]}>
 					<div className="dash-boards-head">
-						<h1>{VIEW_TITLE[view]}</h1>
+						<h1>
+							<Accented text={VIEW_TITLE[view]} />
+						</h1>
 						{view !== "trash" && (
 							<div className="dash-filters">
 								<label>
