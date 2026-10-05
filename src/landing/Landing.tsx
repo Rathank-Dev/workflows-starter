@@ -171,6 +171,14 @@ function AssistantDemo() {
 	);
 }
 
+function CursorArrow() {
+	return (
+		<svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true">
+			<path d="M1 1l13 7-6 1.5L5 16z" />
+		</svg>
+	);
+}
+
 export function Landing() {
 	return (
 		<div className="fy">
@@ -277,6 +285,38 @@ export function Landing() {
 						<p className="fy-fineprint">Three assistant requests a day on the free plan.</p>
 					</div>
 					<AssistantDemo />
+				</section>
+
+				<section className="fy-team" aria-labelledby="team-title">
+					<div className="fy-team-copy">
+						<h2 id="team-title">
+							Make AI a team <em>sport.</em>
+						</h2>
+						<p className="fy-lede">Connect your AI tools to collaborate on their outputs.</p>
+						<div className="fy-actions">
+							<a className="fy-btn fy-btn-primary fy-btn-large" href="/dashboard">
+								Connect
+							</a>
+						</div>
+					</div>
+					<div className="fy-team-board" role="img" aria-label="Teammates reviewing a flow the assistant drew, with live cursors and a comment">
+						<FlowPreview template={TEMPLATES.find((t) => t.id === "secure-pipeline") ?? TEMPLATES[0]} />
+						<span className="fy-cursor" data-who="a" aria-hidden="true">
+							<CursorArrow />
+							<span>Assistant</span>
+						</span>
+						<span className="fy-cursor" data-who="b" aria-hidden="true">
+							<CursorArrow />
+							<span>Dara</span>
+						</span>
+						<span className="fy-cursor" data-who="c" aria-hidden="true">
+							<CursorArrow />
+							<span>Sok</span>
+						</span>
+						<p className="fy-comment" aria-hidden="true">
+							<strong>Dara</strong> Add an approval step before prod?
+						</p>
+					</div>
 				</section>
 
 				<section className="fy-how" aria-labelledby="how-title">
