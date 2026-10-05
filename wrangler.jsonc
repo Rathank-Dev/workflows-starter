@@ -22,7 +22,7 @@
 	/**
 	 * Hyperdrive: pooled, TLS-terminating connection to Postgres.
 	 * Create it once with:
-	 *   npx wrangler hyperdrive create linework-db --connection-string="$DATABASE_URL"
+	 *   npx wrangler hyperdrive create flowyard-db --connection-string="$DATABASE_URL" --caching-disabled
 	 * then paste the id below. Local dev reads the connection string from
 	 * CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE (set by `npm run dev`).
 	 */

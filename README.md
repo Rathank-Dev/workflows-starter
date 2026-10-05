@@ -35,7 +35,7 @@ Leave a provider's pair empty to hide its button. Every assistant provider you c
 
 Live at **https://flowyard.khmersec.workers.dev** (Worker `flowyard`, Hyperdrive config `flowyard-db`).
 
-**Automatic:** [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) is connected to the `flowyard` Worker and deploys every push to `main` (`npm run build`, then `npm run deploy`). Merge a pull request and it ships.
+**Automatic:** [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) is connected to the `flowyard` Worker and deploys every push to `main`. Merge a pull request and it ships. Set the Builds deploy command to `npx wrangler deploy` (the build command already builds; `npm run deploy` would build a second time).
 
 **By hand**, from a machine logged in with `npx wrangler login`:
 
