@@ -229,7 +229,8 @@ html:has(.ly) {
 .ly-hero h1 {
 	margin: 0;
 	font-family: var(--sans);
-	font-size: clamp(44px, 5.4vw, 96px);
+	/* Sized to the hero column, which stops growing at ~545px wide */
+	font-size: clamp(44px, 4.6vw, 66px);
 	font-weight: 300;
 	letter-spacing: -0.03em;
 	line-height: 0.98;
