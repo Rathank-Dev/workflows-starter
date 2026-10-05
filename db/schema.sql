@@ -70,3 +70,9 @@ create table if not exists board_stars (
 	created_at timestamptz not null default now(),
 	primary key (user_id, board_id)
 );
+
+-- 30-day account deletion: requesting it ends sessions and trashes the user's
+-- boards (flagged so they can be restored); signing in again cancels it; a
+-- daily job deletes accounts whose 30 days have passed.
+alter table users add column if not exists deletion_requested_at timestamptz;
+alter table boards add column if not exists trashed_with_account boolean not null default false;

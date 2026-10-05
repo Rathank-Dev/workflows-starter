@@ -1,10 +1,8 @@
+import { DELETION_GRACE_DAYS, TRASH_DAYS, boardStore, requestDeletion } from "./account";
 import { remainingUses, DAILY_LIMIT } from "./ai";
 import type { Sql, User } from "./db";
 import { SESSION_COOKIE } from "./auth";
 import { error, json, setCookie } from "./http";
-
-/** Trashed boards are deleted for good after this many days. */
-export const TRASH_DAYS = 30;
 
 export interface DashboardBoard {
 	id: string;
@@ -18,25 +16,12 @@ export interface DashboardBoard {
 	deleted_at: Date | null;
 }
 
-/** Permanently removes the owner's boards that sat in the trash too long. */
-async function purgeExpiredTrash(sql: Sql, env: Env, userId: string): Promise<void> {
-	const expired = await sql<{ id: string }[]>`
-		delete from boards
-		where owner_id = ${userId} and deleted_at < now() - make_interval(days => ${TRASH_DAYS})
-		returning id
-	`;
-	for (const { id } of expired) {
-		await env.BOARD.get(env.BOARD.idFromName(id)).deleteBoard();
-	}
-}
-
 /**
  * GET /api/dashboard
  * Boards the user owns (including trashed ones) plus boards they opened from
  * someone else's link. The client derives Home / Recent / Starred / Trash.
  */
-export async function listDashboard(sql: Sql, env: Env, user: User): Promise<Response> {
-	await purgeExpiredTrash(sql, env, user.id);
+export async function listDashboard(sql: Sql, user: User): Promise<Response> {
 	const boards = await sql<DashboardBoard[]>`
 		select b.id, b.name, b.created_at, b.updated_at, b.deleted_at,
 			(b.owner_id = ${user.id}) as is_owner,
@@ -86,7 +71,7 @@ export async function trashBoard(sql: Sql, env: Env, user: User, id: string): Pr
 		returning id
 	`;
 	if (!rows.length) return error("Only the board's owner can move it to the trash.", 403);
-	await env.BOARD.get(env.BOARD.idFromName(id)).disconnectAll();
+	await boardStore(env).disconnectAll(id);
 	return json({ ok: true, trashDays: TRASH_DAYS });
 }
 
@@ -130,16 +115,16 @@ export async function logoutEverywhere(sql: Sql, user: User): Promise<Response> 
 
 /**
  * DELETE /api/account  { confirm: "DELETE" }
- * Erases the user's boards (content and registry), sign-ins, sessions, and usage.
+ * Schedules deletion in 30 days: logs out everywhere and trashes the user's
+ * boards. Signing in again before then cancels it.
  */
 export async function deleteAccount(request: Request, sql: Sql, env: Env, user: User): Promise<Response> {
 	const body = (await request.json().catch(() => null)) as { confirm?: unknown } | null;
-	if (body?.confirm !== "DELETE") return error('Type DELETE to confirm.', 400);
-	const owned = await sql<{ id: string }[]>`select id from boards where owner_id = ${user.id}`;
-	for (const { id } of owned) {
-		await env.BOARD.get(env.BOARD.idFromName(id)).deleteBoard();
-	}
-	// Cascades to boards, sign-in accounts, sessions, stars, visits, and usage
-	await sql`delete from users where id = ${user.id}`;
-	return new Response(null, { status: 204, headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }) } });
+	if (body?.confirm !== "DELETE") return error("Type DELETE to confirm.", 400);
+	const deleteAt = await requestDeletion(sql, boardStore(env), user.id);
+	return json(
+		{ deleteAt, graceDays: DELETION_GRACE_DAYS },
+		200,
+		{ "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }) },
+	);
 }

@@ -50,8 +50,9 @@ export function Profile({ session }: { session: Session }) {
 			body: JSON.stringify({ confirm: confirmText }),
 		});
 		setDeleting(false);
-		if (res.ok) window.location.assign("/");
-		else setMessage("Couldn't delete your account. Try again.");
+		const body = (await res.json().catch(() => null)) as { deleteAt?: string } | null;
+		if (res.ok && body?.deleteAt) window.location.assign(`/dashboard?account_scheduled=${encodeURIComponent(body.deleteAt)}`);
+		else setMessage("Couldn't schedule your account for deletion. Try again.");
 	};
 
 	const connected = new Set(data?.accounts.map((a) => a.provider));
@@ -171,7 +172,8 @@ export function Profile({ session }: { session: Session }) {
 						<section className="panel profile-card profile-danger">
 							<h2>Delete account</h2>
 							<p className="small">
-								Permanently deletes your account and every board you own, including boards other people are editing. This can't be undone.
+								You'll be logged out everywhere, and your boards go to the trash; their links stop working, including for people editing them now.
+								Everything is deleted for good after 30 days. Sign in again before then to cancel and get your boards back.
 							</p>
 							<label className="profile-confirm">
 								<span>
@@ -180,7 +182,7 @@ export function Profile({ session }: { session: Session }) {
 								<input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
 							</label>
 							<button type="button" className="danger-btn" disabled={confirmText !== "DELETE" || deleting} onClick={deleteAccount}>
-								{deleting ? "Deleting…" : "Delete my account"}
+								{deleting ? "Scheduling…" : "Delete my account in 30 days"}
 							</button>
 						</section>
 					</>
