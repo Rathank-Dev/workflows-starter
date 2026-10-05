@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Board } from "../../shared/board";
 import { TEMPLATES, buildTemplate, type FlowTemplate } from "../../shared/templates";
 import { AccountButton, SignInDialog } from "../board/account";
@@ -492,8 +492,17 @@ function RowMenu({
 			window.removeEventListener("keydown", onKey);
 		};
 	}, [open]);
+	// Keyboard users land on the first item
+	useEffect(() => {
+		if (open) ref.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+	}, [open]);
 
-	const item = (label: string, a: "trash" | "restore" | "delete" | "rename" | "copy", danger = false) => (
+	const item = (
+		label: string,
+		a: "trash" | "restore" | "delete" | "rename" | "copy",
+		icon: () => ReactNode,
+		danger = false,
+	) => (
 		<button
 			type="button"
 			role="menuitem"
@@ -503,6 +512,7 @@ function RowMenu({
 				onAction(a);
 			}}
 		>
+			{icon()}
 			{label}
 		</button>
 	);
@@ -516,18 +526,20 @@ function RowMenu({
 				<div className="panel menu row-menu-list" role="menu">
 					{view === "trash" ? (
 						<>
-							{item("Restore", "restore")}
-							{item("Delete forever", "delete", true)}
+							{item("Restore", "restore", Icons.restore)}
+							<div className="menu-sep" />
+							{item("Delete forever", "delete", Icons.trash, true)}
 						</>
 					) : (
 						<>
 							<a role="menuitem" href={`/board?board=${row.id}`}>
+								<Icons.open />
 								Open
 							</a>
-							{item("Copy link", "copy")}
-							{row.is_owner && item("Rename", "rename")}
+							{item("Copy link", "copy", Icons.link)}
+							{row.is_owner && item("Rename", "rename", Icons.pencil)}
 							{row.is_owner && <div className="menu-sep" />}
-							{row.is_owner && item("Move to trash", "trash", true)}
+							{row.is_owner && item("Move to trash", "trash", Icons.trash, true)}
 						</>
 					)}
 				</div>

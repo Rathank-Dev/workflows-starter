@@ -882,3 +882,48 @@ a.board-name-cell:hover strong {
 		transform: none;
 	}
 }
+
+/* Row menu: left-aligned items with icons, whatever the table cell's alignment */
+.row-menu-list {
+	text-align: left;
+	min-width: 200px;
+}
+
+.row-menu-list a,
+.row-menu-list button {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	padding: 8px 10px;
+	border-radius: 3px;
+	font-size: 14px;
+	line-height: 1.2;
+}
+
+.row-menu-list svg {
+	width: 17px;
+	height: 17px;
+	flex: none;
+	color: var(--ink-soft);
+}
+
+.row-menu-list a:hover svg,
+.row-menu-list button:hover svg,
+.row-menu-list a:focus-visible svg,
+.row-menu-list button:focus-visible svg {
+	color: var(--teal);
+}
+
+.row-menu-list [data-danger] svg {
+	color: var(--danger);
+}
+
+.row-menu-list [data-danger]:hover,
+.row-menu-list [data-danger]:focus-visible {
+	background: color-mix(in srgb, var(--deny) 14%, transparent);
+}
+
+.row-menu-list [data-danger]:hover svg {
+	color: var(--danger);
+}
