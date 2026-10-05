@@ -2,7 +2,7 @@ import { z } from "zod";
 import { FLOW_LIMITS, validateFlowSpec, type FlowSpec } from "../shared/templates";
 import { availableProviders, generate, providerForOption, type ChatTurn } from "./ai-providers";
 import type { Sql, User } from "./db";
-import { error, json, sha256Hex } from "./http";
+import { error, json } from "./http";
 
 /** Assistant uses per signed-in user per day (resets at midnight UTC). */
 export const DAILY_LIMIT = 3;
@@ -152,8 +152,32 @@ function parseBody(
 class NetworkLimitReached extends Error {}
 
 /** Key for the per-network counter: a salted hash, so raw IPs are never stored. */
-async function networkKey(ip: string): Promise<string> {
-	return (await sha256Hex(`flowyard-ai-usage:${ip}`)).slice(0, 32);
+/**
+ * Groups addresses the way one connection owns them: IPv4 as-is, IPv6 by its
+ * /64 prefix (one home or office usually gets a whole /64, so counting single
+ * IPv6 addresses would let one person rotate through billions of them).
+ */
+export function networkOf(ip: string): string {
+	const addr = ip.trim().toLowerCase();
+	if (!addr.includes(":")) return addr;
+	const v4Mapped = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+	if (v4Mapped) return v4Mapped[1];
+	const [head, tail = ""] = addr.split("::");
+	const left = head ? head.split(":") : [];
+	const right = addr.includes("::") && tail ? tail.split(":") : [];
+	const groups = addr.includes("::") ? [...left, ...Array(8 - left.length - right.length).fill("0"), ...right] : left;
+	return `${groups.slice(0, 4).map((g) => (parseInt(g, 16) || 0).toString(16)).join(":")}::/64`;
+}
+
+/**
+ * Key for the per-network counter: HMAC-SHA256 with a server-only secret, so
+ * the stored value can't be reversed into an IP by guessing (the IPv4 space is
+ * small enough to brute-force a plain or fixed-salt hash).
+ */
+export async function networkKey(ip: string, secret: string): Promise<string> {
+	const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+	const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(networkOf(ip)));
+	return Array.from(new Uint8Array(mac).slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -222,7 +246,11 @@ export async function handleAi(
 	}
 	if (!input) return error("Send a message for the assistant.", 400);
 
-	const ipKey = await networkKey(clientIp);
+	if (!env.AI_USAGE_KEY) {
+		console.error("AI_USAGE_KEY is not set; the per-network assistant limit needs it");
+		return error("The assistant isn't set up correctly on this server.", 503);
+	}
+	const ipKey = await networkKey(clientIp, env.AI_USAGE_KEY);
 	const claim = await claimUse(sql, user.id, ipKey);
 	if (!claim.ok) {
 		return claim.reason === "user"
@@ -257,8 +285,10 @@ export async function handleAi(
 	});
 	if (!result.ok) {
 		if (result.refusal) return json({ reply: result.message, action: "none", flow: null, remaining });
-		// The provider failed, not the person: don't charge them for it
-		await refundUse(sql, user.id, ipKey);
+		// Refund only when the provider did no billable work (outage, network
+		// error, busy). A cut-off or malformed answer was already generated and
+		// paid for; refunding it would let anyone loop on purpose-broken output.
+		if (!result.billable) await refundUse(sql, user.id, ipKey);
 		return error(result.message, result.status);
 	}
 

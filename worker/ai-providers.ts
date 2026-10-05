@@ -34,7 +34,16 @@ export interface GenerateInput {
 	local?: boolean;
 }
 
-export type GenerateResult = { ok: true; value: unknown } | { ok: false; message: string; status: number; refusal?: boolean };
+export type GenerateResult =
+	| { ok: true; value: unknown }
+	| {
+			ok: false;
+			message: string;
+			status: number;
+			refusal?: boolean;
+			/** The provider generated (and charged for) output before this failed */
+			billable?: boolean;
+	  };
 
 const MAX_OUTPUT_TOKENS = 16000;
 
@@ -145,13 +154,13 @@ function httpFailure(label: string, status: number): GenerateResult {
 function parseJson(text: string | undefined | null, label: string): GenerateResult {
 	if (!text || !text.trim()) {
 		console.error(`${label} returned an empty answer`);
-		return { ok: false, status: 502, message: "The AI service sent an empty answer. Try again." };
+		return { ok: false, status: 502, billable: true, message: "The AI service sent an empty answer. Try again." };
 	}
 	try {
 		return { ok: true, value: JSON.parse(text) };
 	} catch {
 		console.error(`${label} returned malformed JSON`);
-		return { ok: false, status: 502, message: "The answer was cut off or malformed. Try a smaller request." };
+		return { ok: false, status: 502, billable: true, message: "The answer was cut off or malformed. Try a smaller request." };
 	}
 }
 
@@ -173,7 +182,7 @@ async function viaAnthropic(model: string, env: Env, input: GenerateInput): Prom
 			return { ok: false, status: 200, refusal: true, message: "I can't help with that request." };
 		}
 		if (response.parsed_output == null) {
-			return { ok: false, status: 502, message: "The answer was cut off. Try a smaller request." };
+			return { ok: false, status: 502, billable: true, message: "The answer was cut off. Try a smaller request." };
 		}
 		return { ok: true, value: response.parsed_output };
 	} catch (err) {

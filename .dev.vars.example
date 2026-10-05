@@ -24,3 +24,6 @@ WORKERS_AI_MODEL=""
 WORKERS_AI=""
 # Cloudflare account for Workers AI in local dev (from `npx wrangler whoami`). Not needed in production.
 CLOUDFLARE_ACCOUNT_ID=""
+
+# Secret for hashing client networks in the assistant usage table (any long random string)
+AI_USAGE_KEY=""
