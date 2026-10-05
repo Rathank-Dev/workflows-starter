@@ -1145,6 +1145,18 @@
 	cursor: pointer;
 }
 
+.ai-quota {
+	grid-column: 1 / -1;
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--ink-soft);
+}
+
+.ai-quota[data-empty] {
+	color: var(--danger);
+	font-weight: 500;
+}
+
 .working-on {
 	grid-column: 1 / -1;
 	margin: 0;

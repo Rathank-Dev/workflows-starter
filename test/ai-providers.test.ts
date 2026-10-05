@@ -103,8 +103,8 @@ describe("Workers AI adapter", () => {
 		expect(args.messages[0]).toEqual({ role: "system", content: "You draw flows." });
 	});
 
-	it("explains how to enable it when the binding fails", async () => {
+	it("explains how to enable it locally when the binding fails", async () => {
 		const aiEnv = { ...env, AI: { run: vi.fn().mockRejectedValue(new Error("no remote")) } } as unknown as Env;
-		expect(await generate(provider, aiEnv, input)).toMatchObject({ ok: false, message: expect.stringContaining("CLOUDFLARE_ACCOUNT_ID") });
+		expect(await generate(provider, aiEnv, { ...input, local: true })).toMatchObject({ ok: false, message: expect.stringContaining("CLOUDFLARE_ACCOUNT_ID") });
 	});
 });

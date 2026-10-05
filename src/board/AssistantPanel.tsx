@@ -19,6 +19,8 @@ interface AiResponse {
 	reply: string;
 	action: "none" | "insert" | "replace";
 	flow: FlowSpec | null;
+	/** Uses left today after this request */
+	remaining?: number;
 }
 
 export function AssistantPanel({
@@ -40,6 +42,8 @@ export function AssistantPanel({
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [draft, setDraft] = useState("");
 	const [busy, setBusy] = useState(false);
+	const [remaining, setRemaining] = useState<number | null>(session.aiRemaining);
+	const outOfUses = remaining !== null && remaining <= 0;
 	const listRef = useRef<HTMLDivElement>(null);
 	const [providerId, setProviderId] = useState<string>(() => {
 		try {
@@ -68,7 +72,7 @@ export function AssistantPanel({
 
 	const send = async (text: string) => {
 		const content = text.trim();
-		if (!content || busy) return;
+		if (!content || busy || outOfUses) return;
 		const ctx = context;
 		const history = [...messages, { role: "user" as const, content }];
 		setMessages(history);
@@ -86,8 +90,10 @@ export function AssistantPanel({
 				}),
 			});
 			const data = (await res.json().catch(() => null)) as (AiResponse & { error?: string }) | null;
+			if (typeof data?.remaining === "number") setRemaining(data.remaining);
 			if (!res.ok || !data || data.error) {
 				if (res.status === 401) onSignIn();
+				if (res.status === 429 && /today/i.test(data?.error ?? "")) setRemaining(0);
 				setMessages((m) => [...m, { role: "assistant", content: data?.error ?? "The assistant didn't answer. Try again.", error: true }]);
 				return;
 			}
@@ -170,12 +176,19 @@ export function AssistantPanel({
 							<span>Model</span>
 							<select value={provider?.id} onChange={(e) => pickProvider(e.target.value)}>
 								{session.assistant.map((p) => (
-									<option key={p.id} value={p.id} title={p.model}>
+									<option key={p.id} value={p.id}>
 										{p.label}
 									</option>
 								))}
 							</select>
 						</label>
+					)}
+					{remaining !== null && (
+						<p className="ai-quota" data-empty={outOfUses || undefined}>
+							{outOfUses
+								? "You've used today's assistant requests. They reset at midnight UTC."
+								: `${remaining} of ${session.aiDailyLimit} assistant requests left today`}
+						</p>
 					)}
 					{context.selected && (
 						<p className="working-on">
@@ -198,7 +211,7 @@ export function AssistantPanel({
 							}
 						}}
 					/>
-					<button type="submit" className="primary-btn" disabled={busy || !draft.trim()}>
+					<button type="submit" className="primary-btn" disabled={busy || outOfUses || !draft.trim()}>
 						Send
 					</button>
 				</form>
