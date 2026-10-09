@@ -37,6 +37,8 @@ Live at **https://flowyard.khmersec.workers.dev** (Worker `flowyard`, Hyperdrive
 
 **Automatic:** [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) is connected to the `flowyard` Worker and deploys every push to `main`. Merge a pull request and it ships. Set the Builds deploy command to `npx wrangler deploy` (the build command already builds; `npm run deploy` would build a second time).
 
+**Database changes first:** if a pull request changes `db/schema.sql`, run `npm run db:migrate` against production before merging it. Migrations are written to work with the code that's already live.
+
 **By hand**, from a machine logged in with `npx wrangler login`:
 
 ```bash
@@ -61,6 +63,10 @@ npx wrangler hyperdrive create flowyard-db --connection-string="postgres://..." 
 Caching stays off so session checks and board lists are never stale. Databases with a private certificate authority (Aiven, for example) work with `sslmode=require`. To also verify the server certificate, upload the CA with `npx wrangler cert upload certificate-authority --ca-cert ca.pem --name aiven-ca` and switch Hyperdrive to `--sslmode verify-full --ca-certificate-id <id>`.
 
 The Worker uses one Durable Object class, `BoardDO` (migration `v1`). If you ever deploy to a different, older Worker, its migration history must match, or the deploy fails with code 10064.
+
+## Security
+
+[SECURITY.md](SECURITY.md) has how to report a problem, what protects the app, the checklist every change goes through, and the release workflow. CI runs lint, type checks, tests, the build, and `npm audit` on every pull request.
 
 ## Using the board
 
