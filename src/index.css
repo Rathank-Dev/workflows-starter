@@ -2127,8 +2127,75 @@ button.text-link:disabled {
 	}
 }
 
+/* Phones: the board name and the share bar don't fit side by side, so the
+   share bar takes a second row and the panels below it move down to match. */
+@media (max-width: 560px) {
+	.board-bar {
+		max-width: calc(100vw - 32px);
+	}
+
+	.board-name {
+		max-width: none;
+	}
+
+	.share-bar {
+		top: 74px;
+	}
+
+	.help,
+	.assistant,
+	.templates,
+	.walkthrough-panel,
+	.side-panel {
+		top: 128px;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.rec-dot {
 		animation: none;
+	}
+}
+
+/* Live cursors: other people's pointers on a shared board */
+.cursor-layer {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	overflow: hidden;
+	z-index: 3;
+}
+
+.live-cursor {
+	position: absolute;
+	top: 0;
+	left: 0;
+	transition: transform 90ms linear;
+	will-change: transform;
+}
+
+.live-cursor svg {
+	display: block;
+	filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4));
+}
+
+.live-cursor span {
+	position: absolute;
+	top: 19px;
+	left: 15px;
+	padding: 2px 7px;
+	border-radius: 6px 6px 6px 2px;
+	background: var(--cursor);
+	color: var(--on-action);
+	font: 500 11px/1.4 var(--font-ui);
+	white-space: nowrap;
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.live-cursor {
+		transition: none;
 	}
 }

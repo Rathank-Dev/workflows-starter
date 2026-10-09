@@ -34,6 +34,7 @@ import {
 import type { Session } from "../session";
 import { AccountButton, SignInDialog, type SignInReason } from "./account";
 import { CommentPins, CommentsPanel, NewComment, ThreadPopover, useThreads } from "./comments";
+import { CursorLayer } from "./cursors";
 import { ShareDialog } from "./ShareDialog";
 import { PlayerDialog, RecordingBar, SaveTakeDialog, WalkthroughPanel, useRecorder, type Recording, type Take } from "./walkthroughs";
 import { AssistantPanel, type AssistantContext } from "./AssistantPanel";
@@ -182,6 +183,10 @@ export function Editor({
 	useEffect(() => {
 		if (doc.error) say(doc.error);
 	}, [doc.error, say]);
+
+	useEffect(() => {
+		document.title = `${board.name || "Untitled board"} · Flowyard`;
+	}, [board.name]);
 
 	// Re-measure text once web fonts arrive
 	useEffect(() => {
@@ -539,6 +544,7 @@ export function Editor({
 	};
 
 	const onPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+		if (e.pointerType !== "touch") doc.sendCursor(toWorld(e.clientX, e.clientY));
 		const d = drag.current;
 		if (!d) return;
 		const p = toWorld(e.clientX, e.clientY);
@@ -1014,7 +1020,9 @@ export function Editor({
 				top: (() => {
 					const above = selectionBounds.y * z + vp.y - 60;
 					const below = (selectionBounds.y + selectionBounds.h) * z + vp.y + 16;
-					return above >= 76 ? above : below < size.h - 120 ? below : 76;
+					// Clear the top bars: one row, or two on phones (see index.css)
+					const clear = size.w <= 560 ? 128 : 76;
+					return above >= clear ? above : below < size.h - 120 ? below : clear;
 				})(),
 			}
 		: null;
@@ -1039,6 +1047,7 @@ export function Editor({
 				onPointerMove={onPointerMove}
 				onPointerUp={onPointerUp}
 				onPointerCancel={onPointerUp}
+				onPointerLeave={() => doc.sendCursor(null)}
 				onDoubleClick={onDoubleClick}
 				role="application"
 				aria-label="Board canvas"
@@ -1193,6 +1202,7 @@ export function Editor({
 				</g>
 			</svg>
 
+			<CursorLayer cursors={doc.cursors} vp={vp} />
 			{boardId && (
 				<CommentPins
 					threads={threads}
