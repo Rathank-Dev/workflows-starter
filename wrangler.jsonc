@@ -27,6 +27,14 @@
 		"enabled": true
 	},
 	/**
+	 * Smart Placement: most requests make several round trips to Postgres, so
+	 * Cloudflare may run the Worker near the database instead of near the
+	 * visitor. Static files are served from the edge either way.
+	 */
+	"placement": {
+		"mode": "smart"
+	},
+	/**
 	 * Hyperdrive: pooled, TLS-terminating connection to Postgres.
 	 * Create it once with:
 	 *   npx wrangler hyperdrive create flowyard-db --connection-string="$DATABASE_URL" --caching-disabled

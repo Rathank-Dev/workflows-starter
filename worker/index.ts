@@ -122,7 +122,7 @@ export default {
 		let sql: Sql | null = null;
 		const db = () => (sql ??= connect(env));
 		try {
-			return withSecurityHeaders(await route(request, env, url, db));
+			return withSecurityHeaders(await route(request, env, url, db, ctx));
 		} catch (err) {
 			console.error("Unhandled error", path, err);
 			return error("Something went wrong on the server. Try again.", 500);
@@ -142,7 +142,7 @@ export default {
 	},
 } satisfies ExportedHandler<Env>;
 
-async function route(request: Request, env: Env, url: URL, db: () => Sql): Promise<Response> {
+async function route(request: Request, env: Env, url: URL, db: () => Sql, ctx: ExecutionContext): Promise<Response> {
 	const path = url.pathname;
 	const method = request.method;
 
@@ -337,17 +337,20 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		// Say so over the socket: a failed upgrade would just look like being offline
 		if (!access.exists) return closedSocket({ type: "deleted" }, 4404, "Board not found");
 		if (!access.role) return closedSocket({ type: "denied", signedIn: visitor !== null }, 4403, "No access");
-		await db()`update boards set updated_at = now() where id = ${id}`;
-		// Remember it for the signed-in visitor's Recent and "Shared with me", with
-		// the key they came in with, so the entry goes away if the link is reset
-		if (visitor) {
-			const visitKey = access.viaLink ? key : null;
-			await db()`
+		// Bookkeeping in one statement, after the socket is handed back: the board's
+		// last-opened time, and the signed-in visitor's Recent / "Shared with me"
+		// entry with the key they came in with (so it goes away if the link is reset).
+		// Issued now, so it lands before sql.end() and before any later sign-out sweep.
+		const visitKey = access.viaLink ? key : null;
+		const bookkeeping = visitor
+			? db()`
+				with opened as (update boards set updated_at = now() where id = ${id})
 				insert into board_visits (user_id, board_id, link_key) values (${visitor.id}, ${id}, ${visitKey})
 				on conflict (user_id, board_id) do update set last_opened_at = now(),
 					link_key = coalesce(excluded.link_key, board_visits.link_key)
-			`;
-		}
+			`
+			: db()`update boards set updated_at = now() where id = ${id}`;
+		ctx.waitUntil(Promise.resolve(bookkeeping).catch((err) => console.error("Board visit not recorded", id, err)));
 		// Tell the board who this is. Always set (or cleared) here, so a client can't supply its own.
 		const headers = new Headers(request.headers);
 		headers.set(ROLE_HEADER, access.role);
