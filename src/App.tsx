@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { boardPath } from "./board/linkKey";
+import { CookieBanner } from "./consent";
 import { useSession } from "./session";
 
 // One chunk per page, so the homepage doesn't download the board editor.
@@ -8,6 +9,7 @@ const Dashboard = lazy(() => import("./dashboard/Dashboard").then((m) => ({ defa
 const Profile = lazy(() => import("./dashboard/Profile").then((m) => ({ default: m.Profile })));
 const Landing = lazy(() => import("./landing/Landing").then((m) => ({ default: m.Landing })));
 const NotFound = lazy(() => import("./notfound/NotFound").then((m) => ({ default: m.NotFound })));
+const Privacy = lazy(() => import("./privacy/Privacy").then((m) => ({ default: m.Privacy })));
 
 /** Shared boards have a 32-character hex id in ?board=. Anything else is the browser-only board. */
 function boardIdFromUrl(): string | null {
@@ -67,14 +69,18 @@ function Page() {
 	if (path === "/dashboard") return <SessionPage page="dashboard" />;
 	if (path === "/profile") return <SessionPage page="profile" />;
 	if (path === "") return <Landing />;
+	if (path === "/privacy") return <Privacy />;
 	return <NotFound />;
 }
 
 function App() {
 	return (
-		<Suspense fallback={null}>
-			<Page />
-		</Suspense>
+		<>
+			<Suspense fallback={null}>
+				<Page />
+			</Suspense>
+			<CookieBanner />
+		</>
 	);
 }
 

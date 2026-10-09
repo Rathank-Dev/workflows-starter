@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AccountButton, Avatar } from "../board/account";
 import { Mark } from "../board/icons";
-import { PROVIDER_LABEL, signInUrl, type Provider, type Session } from "../session";
+import { PROVIDER_LABEL, forgetSharedBoards, signInUrl, type Provider, type Session } from "../session";
 import "./dashboard.css";
 
 interface ProfileData {
@@ -38,7 +38,10 @@ export function Profile({ session }: { session: Session }) {
 	const logoutAll = async () => {
 		if (!window.confirm("Log out on every device, including this one?")) return;
 		const res = await fetch("/auth/logout-all", { method: "POST" });
-		if (res.ok) window.location.assign("/");
+		if (res.ok) {
+			forgetSharedBoards();
+			window.location.assign("/");
+		}
 		else setMessage("Couldn't log out everywhere. Try again.");
 	};
 
@@ -51,7 +54,10 @@ export function Profile({ session }: { session: Session }) {
 		});
 		setDeleting(false);
 		const body = (await res.json().catch(() => null)) as { deleteAt?: string } | null;
-		if (res.ok && body?.deleteAt) window.location.assign(`/dashboard?account_scheduled=${encodeURIComponent(body.deleteAt)}`);
+		if (res.ok && body?.deleteAt) {
+			forgetSharedBoards();
+			window.location.assign(`/dashboard?account_scheduled=${encodeURIComponent(body.deleteAt)}`);
+		}
 		else setMessage("Couldn't schedule your account for deletion. Try again.");
 	};
 

@@ -5,6 +5,8 @@ import { deleteBoardRecordings } from "./recordings";
 export const DELETION_GRACE_DAYS = 30;
 /** Trashed boards are deleted for good after this many days. */
 export const TRASH_DAYS = 30;
+/** A session ends after this many days without use (and 30 days after sign-in regardless). */
+export const SESSION_IDLE_DAYS = 7;
 
 /** Minimal Durable Object access, so this module also runs outside the Worker (tests, scripts). */
 export interface BoardStore {
@@ -104,6 +106,9 @@ export async function purgeDue(sql: Sql, store: BoardStore): Promise<{ accounts:
 	// Usage counters only matter for today
 	await sql`delete from ai_usage where day < current_date - 7`;
 	await sql`delete from ai_ip_usage where day < current_date - 7`;
-	await sql`delete from sessions where expires_at < now()`;
+	await sql`
+		delete from sessions
+		where expires_at < now() or last_used_at < now() - make_interval(days => ${SESSION_IDLE_DAYS})
+	`;
 	return { accounts: users.length, boards };
 }

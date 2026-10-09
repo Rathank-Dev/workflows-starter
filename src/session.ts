@@ -52,6 +52,7 @@ export function useSession() {
 
 	const signOut = useCallback(async () => {
 		await fetch("/auth/logout", { method: "POST" }).catch(() => {});
+		forgetSharedBoards();
 		setState((s) => ({ ...s, user: null }));
 	}, []);
 
@@ -59,6 +60,21 @@ export function useSession() {
 }
 
 export type Session = ReturnType<typeof useSession>;
+
+/**
+ * Signing out: remove this browser's copies of shared boards and the roles
+ * seen on them (see useBoardDoc), so the next person at this computer can't
+ * read them. The signed-out board ("linework:local") is the user's own and stays.
+ */
+export function forgetSharedBoards() {
+	try {
+		for (const key of Object.keys(localStorage)) {
+			if (key.startsWith("linework:board:") || key.startsWith("linework:role:")) localStorage.removeItem(key);
+		}
+	} catch {
+		// Storage blocked: nothing was saved
+	}
+}
 
 export const PROVIDER_LABEL: Record<Provider, string> = {
 	github: "GitHub",

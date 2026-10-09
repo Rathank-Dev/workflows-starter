@@ -20,10 +20,23 @@ export function getCookie(request: Request, name: string): string | null {
 	if (!header) return null;
 	for (const part of header.split(";")) {
 		const [k, ...v] = part.trim().split("=");
-		if (k === name) return decodeURIComponent(v.join("="));
+		if (k !== name) continue;
+		try {
+			return decodeURIComponent(v.join("="));
+		} catch {
+			// Malformed escape (e.g. "%E0"): treat it as no cookie, not a server error
+			return null;
+		}
 	}
 	return null;
 }
+
+/**
+ * Sent when someone signs out: drops this site's HTTP cache in their browser
+ * (walkthrough videos are cached privately for an hour). Storage is left
+ * alone so a signed-out board isn't lost; the client clears shared boards.
+ */
+export const CLEAR_CACHE = { "Clear-Site-Data": '"cache"' };
 
 export function setCookie(
 	name: string,

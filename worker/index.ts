@@ -23,7 +23,7 @@ import {
 	playRecording,
 	uploadRecording,
 } from "./recordings";
-import { getReferral, referralLanding } from "./referrals";
+import { getReferral, referralLanding, rememberReferral } from "./referrals";
 import { getSharing, joinBoard, resetInvite, resetLink, updateMember, updateSharing } from "./sharing";
 import { SECURITY_HEADERS, error, json, linkKeyOf, randomHex, sameOrigin } from "./http";
 
@@ -80,6 +80,7 @@ async function limited(limiter: RateLimit | undefined, key: string): Promise<boo
  * Invite rewards
  * - GET /r/:code         Referral link; remembers the inviter
  * - GET /api/referral    Your referral link and count
+ * - POST /api/referral/remember   Keep the referral cookie (after cookie consent)
  *
  * Assistant
  * - POST /api/ai             Sign-in required
@@ -169,6 +170,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		return user ? deleteAccount(request, db(), env, user) : error("Sign in first.", 401);
 	}
 
+	if (path === "/api/referral/remember" && method === "POST") return rememberReferral(request);
 	if (path === "/api/referral" && method === "GET") {
 		const user = await currentUser(request, db());
 		return user ? getReferral(request, db(), user) : error("Sign in to get your invite link.", 401);

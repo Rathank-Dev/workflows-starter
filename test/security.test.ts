@@ -180,3 +180,48 @@ describe("share keys", () => {
 		expect(linkKeyOf(req("&key=' or 1=1--"))).toBeNull();
 	});
 });
+
+describe("cookies", () => {
+	const post = (path: string, body: unknown, origin = ORIGIN) =>
+		SELF.fetch(`${ORIGIN}${path}`, {
+			method: "POST",
+			headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "10.7.0.1" },
+			body: JSON.stringify(body),
+		});
+
+	it("treats a malformed session cookie as signed out, not a server error", async () => {
+		const res = await SELF.fetch(`${ORIGIN}/api/me`, {
+			headers: { Cookie: "__Host-lw_session=%E0%A4%A", "CF-Connecting-IP": "10.7.0.2" },
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({ user: null });
+	});
+
+	it("keeps no referral cookie until the visitor agrees", async () => {
+		const landing = await SELF.fetch(`${ORIGIN}/r/abcd2345`, { redirect: "manual", headers: { "CF-Connecting-IP": "10.7.0.3" } });
+		expect(landing.status).toBe(302);
+		expect(landing.headers.get("Location")).toBe("/?ref=abcd2345");
+		expect(landing.headers.get("Set-Cookie")).toBeNull();
+
+		const agreed = await post("/api/referral/remember", { code: "abcd2345" });
+		expect(agreed.status).toBe(204);
+		const cookie = agreed.headers.get("Set-Cookie") ?? "";
+		expect(cookie).toMatch(/^__Host-lw_ref=abcd2345;/);
+		expect(cookie).toMatch(/HttpOnly/);
+		expect(cookie).toMatch(/Secure/);
+		expect(cookie).toMatch(/SameSite=Lax/);
+
+		expect((await post("/api/referral/remember", { code: "<script>" })).status).toBe(400);
+		expect((await post("/api/referral/remember", { code: "abcd2345" }, "https://evil.example")).status).toBe(403);
+	});
+
+	it("clears the browser's cache for this site on sign-out", async () => {
+		const res = await SELF.fetch(`${ORIGIN}/auth/logout`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, "CF-Connecting-IP": "10.7.0.4" },
+		});
+		expect(res.status).toBe(204);
+		expect(res.headers.get("Clear-Site-Data")).toBe('"cache"');
+		expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-lw_session=; .*Max-Age=0/);
+	});
+});
