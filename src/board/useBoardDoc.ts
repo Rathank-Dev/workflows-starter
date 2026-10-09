@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBoard, type Board } from "../../shared/board";
 import type { BoardComment, CommentOp } from "../../shared/comments";
-import { starterBoard } from "../../shared/templates";
 
 export type SyncStatus = "local" | "connecting" | "live" | "offline" | "deleted" | "denied";
 export type BoardRole = "owner" | "edit" | "view";
@@ -70,7 +69,8 @@ function saveRole(boardId: string, role: BoardRole) {
  */
 export function useBoardDoc(boardId: string | null) {
 	const [board, setBoard] = useState<Board>(
-		() => loadLocal(boardId) ?? (boardId ? { v: 1, name: "Untitled board", elements: [] } : starterBoard()),
+		// New boards start empty; templates go on only when someone picks one
+		() => loadLocal(boardId) ?? { v: 1, name: "Untitled board", elements: [] },
 	);
 	const [status, setStatus] = useState<SyncStatus>(boardId ? "connecting" : "local");
 	const [presence, setPresence] = useState(1);
