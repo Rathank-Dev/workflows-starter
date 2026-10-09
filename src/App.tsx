@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
-import { Editor } from "./board/Editor";
-import { Dashboard } from "./dashboard/Dashboard";
-import { Profile } from "./dashboard/Profile";
-import { Landing } from "./landing/Landing";
-import { NotFound } from "./notfound/NotFound";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useSession } from "./session";
+
+// One chunk per page, so the homepage doesn't download the board editor.
+const Editor = lazy(() => import("./board/Editor").then((m) => ({ default: m.Editor })));
+const Dashboard = lazy(() => import("./dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
+const Profile = lazy(() => import("./dashboard/Profile").then((m) => ({ default: m.Profile })));
+const Landing = lazy(() => import("./landing/Landing").then((m) => ({ default: m.Landing })));
+const NotFound = lazy(() => import("./notfound/NotFound").then((m) => ({ default: m.NotFound })));
 
 /** Shared boards have a 32-character hex id in ?board=. Anything else is the browser-only board. */
 function boardIdFromUrl(): string | null {
@@ -52,16 +54,27 @@ function BoardApp() {
 
 function SessionPage({ page }: { page: "dashboard" | "profile" }) {
 	const session = useSession();
+	useEffect(() => {
+		document.title = page === "dashboard" ? "Your boards · Flowyard" : "Profile · Flowyard";
+	}, [page]);
 	return page === "dashboard" ? <Dashboard session={session} /> : <Profile session={session} />;
 }
 
-function App() {
+function Page() {
 	const path = window.location.pathname.replace(/\/+$/, "");
 	if (isBoardRoute()) return <BoardApp />;
 	if (path === "/dashboard") return <SessionPage page="dashboard" />;
 	if (path === "/profile") return <SessionPage page="profile" />;
 	if (path === "") return <Landing />;
 	return <NotFound />;
+}
+
+function App() {
+	return (
+		<Suspense fallback={null}>
+			<Page />
+		</Suspense>
+	);
 }
 
 export default App;

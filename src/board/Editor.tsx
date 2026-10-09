@@ -184,6 +184,10 @@ export function Editor({
 		if (doc.error) say(doc.error);
 	}, [doc.error, say]);
 
+	useEffect(() => {
+		document.title = `${board.name || "Untitled board"} · Flowyard`;
+	}, [board.name]);
+
 	// Re-measure text once web fonts arrive
 	useEffect(() => {
 		document.fonts?.ready.then(() => {

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /$
+Allow: /board$
+# Shared boards, accounts, and the API are private
+Disallow: /board?
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /api/
+Disallow: /auth/
+Disallow: /r/
+
+Sitemap: https://flowyard.khmersec.workers.dev/sitemap.xml
