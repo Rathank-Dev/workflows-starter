@@ -10,6 +10,7 @@ import type { Role } from "./access";
  * - Accepts WebSockets with the hibernation API
  * - Saves updates from one client and relays them to everyone else
  * - Keeps comment threads in their own table, so document saves never drop them
+ * - Relays live cursors between sockets without storing them
  *
  * Conflicts resolve as last write wins for the whole document.
  *
@@ -19,6 +20,11 @@ import type { Role } from "./access";
 /** Per-connection write budget: a steady 10 saves a second, bursts up to 30. */
 const WRITE_RATE = 10;
 const WRITE_BURST = 30;
+/** Cursor moves per socket: clients send about 20 a second; extras are dropped silently. */
+const CURSOR_RATE = 30;
+const CURSOR_BURST = 60;
+/** Cursors further out than this are junk, not a place on the board. */
+const CURSOR_LIMIT = 1_000_000;
 /** Open sockets allowed per board; each save is re-sent to all of them. */
 export const MAX_CONNECTIONS = 50;
 /**
@@ -36,12 +42,31 @@ interface Peer {
 	role: Role;
 	userId: string | null;
 	name: string | null;
+	/** Short per-socket id for cursors. Missing on sockets from before cursors existed. */
+	sid?: string;
 }
 
 function peerOf(ws: WebSocket): Peer {
 	const p = ws.deserializeAttachment() as Peer | null;
 	// Sockets from before roles existed can only look
 	return p ?? { role: "view", userId: null, name: null };
+}
+
+/** Token bucket: refills at `rate` a second up to `burst`. Returns whether one token was taken. */
+function take(
+	buckets: WeakMap<WebSocket, { tokens: number; at: number }>,
+	ws: WebSocket,
+	rate: number,
+	burst: number,
+): boolean {
+	const now = Date.now();
+	const b = buckets.get(ws) ?? { tokens: burst, at: now };
+	b.tokens = Math.min(burst, b.tokens + ((now - b.at) / 1000) * rate);
+	b.at = now;
+	const ok = b.tokens >= 1;
+	if (ok) b.tokens -= 1;
+	buckets.set(ws, b);
+	return ok;
 }
 
 function send(ws: WebSocket, data: unknown): void {
@@ -56,16 +81,10 @@ export class BoardDO extends DurableObject<Env> {
 	private sql: SqlStorage;
 	/** Token buckets per socket. In memory only: hibernation resets them, which is fine. */
 	private buckets = new WeakMap<WebSocket, { tokens: number; at: number }>();
+	private cursorBuckets = new WeakMap<WebSocket, { tokens: number; at: number }>();
 
 	private allowWrite(ws: WebSocket): boolean {
-		const now = Date.now();
-		const b = this.buckets.get(ws) ?? { tokens: WRITE_BURST, at: now };
-		b.tokens = Math.min(WRITE_BURST, b.tokens + ((now - b.at) / 1000) * WRITE_RATE);
-		b.at = now;
-		const ok = b.tokens >= 1;
-		if (ok) b.tokens -= 1;
-		this.buckets.set(ws, b);
-		return ok;
+		return take(this.buckets, ws, WRITE_RATE, WRITE_BURST);
 	}
 
 	constructor(ctx: DurableObjectState, env: Env) {
@@ -104,7 +123,12 @@ export class BoardDO extends DurableObject<Env> {
 		}
 		const userId = request.headers.get(USER_HEADER);
 		const rawName = request.headers.get(NAME_HEADER);
-		const peer: Peer = { role, userId: userId || null, name: rawName ? decodeURIComponent(rawName).slice(0, 120) : null };
+		const peer: Peer = {
+			role,
+			userId: userId || null,
+			name: rawName ? decodeURIComponent(rawName).slice(0, 120) : null,
+			sid: crypto.randomUUID().slice(0, 8),
+		};
 
 		const pair = new WebSocketPair();
 		const [client, server] = Object.values(pair);
@@ -199,6 +223,10 @@ export class BoardDO extends DurableObject<Env> {
 			this.onComment(ws, data);
 			return;
 		}
+		if (type === "cursor") {
+			this.onCursor(ws, data as { x?: unknown; y?: unknown });
+			return;
+		}
 		if (type !== "update") return;
 
 		const peer = peerOf(ws);
@@ -237,6 +265,23 @@ export class BoardDO extends DurableObject<Env> {
 			// Already closed
 		}
 		this.broadcastPresence(ws);
+		const { sid } = peerOf(ws);
+		if (sid) this.broadcast({ type: "cursor:gone", id: sid }, ws);
+	}
+
+	/** `{x, y}` in board coordinates moves this socket's cursor; `{x: null}` hides it. */
+	private onCursor(ws: WebSocket, data: { x?: unknown; y?: unknown }): void {
+		const peer = peerOf(ws);
+		if (!peer.sid) return;
+		if (data.x === null) {
+			this.broadcast({ type: "cursor:gone", id: peer.sid }, ws);
+			return;
+		}
+		const { x, y } = data;
+		const valid = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= CURSOR_LIMIT;
+		if (!valid(x) || !valid(y)) return;
+		if (!take(this.cursorBuckets, ws, CURSOR_RATE, CURSOR_BURST)) return;
+		this.broadcast({ type: "cursor", id: peer.sid, name: peer.name, x, y }, ws);
 	}
 
 	private onComment(ws: WebSocket, data: object): void {
@@ -353,9 +398,11 @@ export class BoardDO extends DurableObject<Env> {
 		}));
 	}
 
-	private broadcast(data: unknown): void {
+	/** Sends to every open socket, except `skip` when given. */
+	private broadcast(data: unknown, skip?: WebSocket): void {
 		const msg = JSON.stringify(data);
 		for (const socket of this.ctx.getWebSockets()) {
+			if (socket === skip) continue;
 			try {
 				socket.send(msg);
 			} catch {

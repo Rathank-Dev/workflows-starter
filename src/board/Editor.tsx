@@ -34,6 +34,7 @@ import {
 import type { Session } from "../session";
 import { AccountButton, SignInDialog, type SignInReason } from "./account";
 import { CommentPins, CommentsPanel, NewComment, ThreadPopover, useThreads } from "./comments";
+import { CursorLayer } from "./cursors";
 import { ShareDialog } from "./ShareDialog";
 import { PlayerDialog, RecordingBar, SaveTakeDialog, WalkthroughPanel, useRecorder, type Recording, type Take } from "./walkthroughs";
 import { AssistantPanel, type AssistantContext } from "./AssistantPanel";
@@ -539,6 +540,7 @@ export function Editor({
 	};
 
 	const onPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+		if (e.pointerType !== "touch") doc.sendCursor(toWorld(e.clientX, e.clientY));
 		const d = drag.current;
 		if (!d) return;
 		const p = toWorld(e.clientX, e.clientY);
@@ -1039,6 +1041,7 @@ export function Editor({
 				onPointerMove={onPointerMove}
 				onPointerUp={onPointerUp}
 				onPointerCancel={onPointerUp}
+				onPointerLeave={() => doc.sendCursor(null)}
 				onDoubleClick={onDoubleClick}
 				role="application"
 				aria-label="Board canvas"
@@ -1193,6 +1196,7 @@ export function Editor({
 				</g>
 			</svg>
 
+			<CursorLayer cursors={doc.cursors} vp={vp} />
 			{boardId && (
 				<CommentPins
 					threads={threads}

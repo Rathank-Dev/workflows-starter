@@ -9,9 +9,17 @@ export interface Person {
 	id: string;
 	name: string;
 }
+/** Someone else's pointer, in board coordinates. `name` is null for guests. */
+export interface Cursor {
+	id: string;
+	name: string | null;
+	x: number;
+	y: number;
+}
 
 const HISTORY_LIMIT = 200;
 const SEND_EVERY_MS = 120;
+const CURSOR_EVERY_MS = 50;
 
 /** null is the browser-only board you get without signing in. */
 function localKey(boardId: string | null) {
@@ -67,6 +75,7 @@ export function useBoardDoc(boardId: string | null) {
 	const [status, setStatus] = useState<SyncStatus>(boardId ? "connecting" : "local");
 	const [presence, setPresence] = useState(1);
 	const [people, setPeople] = useState<Person[]>([]);
+	const [cursors, setCursors] = useState<Map<string, Cursor>>(new Map());
 	/**
 	 * Browser-only boards are yours to edit. Shared boards start with the role
 	 * last seen on this device (edit if new), so a template or offline edit made
@@ -91,6 +100,9 @@ export function useBoardDoc(boardId: string | null) {
 	const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const unsynced = useRef(false);
+	const alone = useRef(true);
+	const cursorOut = useRef<{ x: number; y: number } | null | undefined>(undefined);
+	const cursorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const flushSend = useCallback(() => {
 		sendTimer.current = null;
@@ -203,6 +215,10 @@ export function useBoardDoc(boardId: string | null) {
 				canComment?: boolean;
 				signedIn?: boolean;
 				people?: Person[];
+				id?: string;
+				name?: string | null;
+				x?: number;
+				y?: number;
 				items?: BoardComment[];
 				comment?: BoardComment;
 				ids?: string[];
@@ -240,6 +256,18 @@ export function useBoardDoc(boardId: string | null) {
 				} else if (msg.type === "presence" && typeof msg.count === "number") {
 					setPresence(Math.max(1, msg.count));
 					setPeople(Array.isArray(msg.people) ? msg.people : []);
+					alone.current = msg.count <= 1;
+				} else if (msg.type === "cursor" && typeof msg.id === "string" && typeof msg.x === "number" && typeof msg.y === "number") {
+					const c: Cursor = { id: msg.id, name: typeof msg.name === "string" ? msg.name : null, x: msg.x, y: msg.y };
+					setCursors((m) => new Map(m).set(c.id, c));
+				} else if (msg.type === "cursor:gone" && typeof msg.id === "string") {
+					const id = msg.id;
+					setCursors((m) => {
+						if (!m.has(id)) return m;
+						const next = new Map(m);
+						next.delete(id);
+						return next;
+					});
 				} else if (msg.type === "deleted") {
 					closed = true;
 					socket.close();
@@ -264,6 +292,8 @@ export function useBoardDoc(boardId: string | null) {
 				}
 				setStatus("offline");
 				setPresence(1);
+				setCursors(new Map());
+				alone.current = true;
 				attempt += 1;
 				retry = setTimeout(connect, Math.min(15_000, 500 * 2 ** attempt));
 			};
@@ -277,8 +307,28 @@ export function useBoardDoc(boardId: string | null) {
 			if (retry) clearTimeout(retry);
 			ws.current?.close();
 			ws.current = null;
+			setCursors(new Map());
+			alone.current = true;
 		};
 	}, [boardId, flushSend, set, reconnectTick]);
+
+	/**
+	 * Shares where this pointer is (board coordinates), or null when it leaves
+	 * the canvas. Sends at most every CURSOR_EVERY_MS, and nothing when no one
+	 * else is here to see it.
+	 */
+	const sendCursor = useCallback((at: { x: number; y: number } | null) => {
+		cursorOut.current = at && { x: Math.round(at.x), y: Math.round(at.y) };
+		if (cursorTimer.current) return;
+		cursorTimer.current = setTimeout(() => {
+			cursorTimer.current = null;
+			const out = cursorOut.current;
+			cursorOut.current = undefined;
+			const socket = ws.current;
+			if (out === undefined || alone.current || socket?.readyState !== WebSocket.OPEN) return;
+			socket.send(JSON.stringify(out ? { type: "cursor", ...out } : { type: "cursor", x: null }));
+		}, CURSOR_EVERY_MS);
+	}, []);
 
 	/** Sends a comment change. Returns false when not connected. */
 	const sendComment = useCallback((op: CommentOp) => {
@@ -308,6 +358,8 @@ export function useBoardDoc(boardId: string | null) {
 		status,
 		presence,
 		people,
+		cursors,
+		sendCursor,
 		role,
 		canEdit: role !== "view",
 		canComment,

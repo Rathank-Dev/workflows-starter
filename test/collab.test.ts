@@ -185,3 +185,49 @@ describe("walkthrough uploads", () => {
 		expect(res.status).toBe(413);
 	});
 });
+
+describe("live cursors", () => {
+	it("relays a cursor to everyone else with the sender's name, and says when they leave", async () => {
+		const name = `cursor-${Date.now()}`;
+		const ada = await join(name, "edit", { id: "u-ada", name: "Ada" });
+		const guest = await join(name, "view");
+		await ada.next("hello");
+		await guest.next("hello");
+
+		const before = ada.messages.length;
+		ada.ws!.send(JSON.stringify({ type: "cursor", x: 120.5, y: -40 }));
+		const seen = await guest.next("cursor");
+		expect(seen).toMatchObject({ name: "Ada", x: 120.5, y: -40 });
+		expect(typeof seen?.id).toBe("string");
+		await settle();
+		expect(ada.messages.slice(before).some((m) => m.type === "cursor")).toBe(false);
+
+		// Viewers can point too; anonymous ones have no name
+		guest.ws!.send(JSON.stringify({ type: "cursor", x: 1, y: 2 }));
+		expect(await ada.next("cursor", before)).toMatchObject({ name: null, x: 1, y: 2 });
+
+		ada.ws!.close(1000);
+		const gone = await guest.next("cursor:gone");
+		expect(gone?.id).toBe(seen?.id);
+		guest.ws!.close(1000);
+	});
+
+	it("hides a cursor on request and ignores bad coordinates", async () => {
+		const name = `cursor-bad-${Date.now()}`;
+		const a = await join(name, "edit");
+		const b = await join(name, "edit");
+		await a.next("hello");
+		await b.next("hello");
+
+		for (const bad of [{ x: "1", y: 2 }, { x: 1e12, y: 0 }, { x: Number.NaN, y: 0 }, { y: 3 }]) {
+			a.ws!.send(JSON.stringify({ type: "cursor", ...bad }));
+		}
+		await settle();
+		expect(b.messages.some((m) => m.type === "cursor")).toBe(false);
+
+		a.ws!.send(JSON.stringify({ type: "cursor", x: null }));
+		expect(await b.next("cursor:gone")).not.toBeNull();
+		a.ws!.close(1000);
+		b.ws!.close(1000);
+	});
+});
