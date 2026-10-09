@@ -1020,7 +1020,9 @@ export function Editor({
 				top: (() => {
 					const above = selectionBounds.y * z + vp.y - 60;
 					const below = (selectionBounds.y + selectionBounds.h) * z + vp.y + 16;
-					return above >= 76 ? above : below < size.h - 120 ? below : 76;
+					// Clear the top bars: one row, or two on phones (see index.css)
+					const clear = size.w <= 560 ? 128 : 76;
+					return above >= clear ? above : below < size.h - 120 ? below : clear;
 				})(),
 			}
 		: null;

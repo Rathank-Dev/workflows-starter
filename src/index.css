@@ -2127,6 +2127,30 @@ button.text-link:disabled {
 	}
 }
 
+/* Phones: the board name and the share bar don't fit side by side, so the
+   share bar takes a second row and the panels below it move down to match. */
+@media (max-width: 560px) {
+	.board-bar {
+		max-width: calc(100vw - 32px);
+	}
+
+	.board-name {
+		max-width: none;
+	}
+
+	.share-bar {
+		top: 74px;
+	}
+
+	.help,
+	.assistant,
+	.templates,
+	.walkthrough-panel,
+	.side-panel {
+		top: 128px;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.rec-dot {
 		animation: none;
