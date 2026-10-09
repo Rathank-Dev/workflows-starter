@@ -14,8 +14,8 @@ type Sort = "opened" | "name" | "created";
 
 interface Row {
 	id: string;
-	/** Share key: board links need it to open for anyone but the owner and members. */
-	key: string;
+	/** Share key: board links need it to open for anyone but the owner and members. Null for members. */
+	key: string | null;
 	name: string;
 	is_owner: boolean;
 	owner_name: string;

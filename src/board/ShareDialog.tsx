@@ -164,8 +164,9 @@ function InviteTab({
   if (!data) return <p className="dialog-note">Loading…</p>;
 
   const isOwner = data.role === "owner";
-  // Link visitors aren't sent the key; they already have it in this page's address
-  const boardLink = data.linkUrl ?? `${window.location.origin}${boardPath(boardId, linkKey())}`;
+  // Only the owner is sent the key; people who came through the link have it in this page's address
+  const pageKey = linkKey();
+  const boardLink = data.linkUrl ?? (pageKey ? `${window.location.origin}${boardPath(boardId, pageKey)}` : null);
   const hereIds = new Set(here.map((p) => p.id));
   const invite = data.invite;
   const mail = (url: string) =>
@@ -318,27 +319,31 @@ function InviteTab({
           )}
         </div>
         <p className="share-help">{LINK_HELP[data.linkAccess]}</p>
-        <div className="share-row">
-          <input
-            readOnly
-            value={boardLink}
-            aria-label="Board link"
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={async () =>
-              say(
-                (await copyText(boardLink))
-                  ? "Board link copied"
-                  : "Select the link and copy it",
-              )
-            }
-          >
-            Copy
-          </button>
-        </div>
+        {boardLink ? (
+          <div className="share-row">
+            <input
+              readOnly
+              value={boardLink}
+              aria-label="Board link"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={async () =>
+                say(
+                  (await copyText(boardLink))
+                    ? "Board link copied"
+                    : "Select the link and copy it",
+                )
+              }
+            >
+              Copy
+            </button>
+          </div>
+        ) : (
+          data.linkAccess !== "none" && <p className="share-help">Ask the board's owner for the link.</p>
+        )}
         {isOwner && (
           <div className="share-links">
             <button

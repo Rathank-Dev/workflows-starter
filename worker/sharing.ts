@@ -16,9 +16,10 @@ function boardUrl(origin: string, boardId: string, key: string): string {
 
 /**
  * GET /api/boards/:id/sharing
- * Anyone with access sees the board's sharing settings. The owner and members
- * get the share link (people who came through the link already have it); only
- * the owner gets the invite link and the controls.
+ * Anyone with access sees the board's sharing settings. Only the owner is
+ * sent the share link: the key can grant more than a member's own role (a
+ * view-only member, with an editable link), and people who came in through
+ * the link already have it. Only the owner gets the invite link and controls.
  */
 export async function getSharing(request: Request, sql: Sql, user: User | null, id: string): Promise<Response> {
 	const access = await boardAccess(sql, id, user, linkKeyOf(request));
@@ -44,7 +45,7 @@ export async function getSharing(request: Request, sql: Sql, user: User | null, 
 	return json({
 		role: access.role,
 		linkAccess: access.linkAccess,
-		linkUrl: access.isMember || access.viaLink ? boardUrl(origin, id, board.link_key) : null,
+		linkUrl: access.role === "owner" ? boardUrl(origin, id, board.link_key) : null,
 		invite: isOwner
 			? {
 					role: board.invite_role,
