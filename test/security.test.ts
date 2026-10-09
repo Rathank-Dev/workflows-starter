@@ -1,5 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { linkRole } from "../worker/access";
+import { linkKeyOf } from "../worker/http";
 
 const ORIGIN = "https://example.com";
 
@@ -153,5 +155,28 @@ describe("auth cookies", () => {
 			headers: { Origin: ORIGIN, "CF-Connecting-IP": "10.0.0.7" },
 		});
 		expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-lw_session=; Path=\/; Max-Age=0; HttpOnly; Secure; SameSite=Lax$/);
+	});
+});
+
+describe("share keys", () => {
+	const key = "0123456789abcdef0123456789abcdef";
+
+	it("grants link access only with the board's current key", () => {
+		expect(linkRole("edit", key, key)).toBe("edit");
+		expect(linkRole("view", key, key)).toBe("view");
+		// The board id alone, a wrong key, or an old key after a reset: nothing
+		expect(linkRole("edit", key, null)).toBeNull();
+		expect(linkRole("edit", key, "f".repeat(32))).toBeNull();
+		expect(linkRole("edit", key, key.slice(0, 31))).toBeNull();
+		// A locked link stays locked even with the key
+		expect(linkRole("none", key, key)).toBeNull();
+	});
+
+	it("reads only well-formed keys from a request", () => {
+		const req = (q: string) => new Request(`${ORIGIN}/ws?board=${"a".repeat(32)}${q}`);
+		expect(linkKeyOf(req(`&key=${key}`))).toBe(key);
+		expect(linkKeyOf(req(""))).toBeNull();
+		expect(linkKeyOf(req(`&key=${key.toUpperCase()}`))).toBeNull();
+		expect(linkKeyOf(req("&key=' or 1=1--"))).toBeNull();
 	});
 });

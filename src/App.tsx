@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { boardPath } from "./board/linkKey";
 import { useSession } from "./session";
 
 // One chunk per page, so the homepage doesn't download the board editor.
@@ -43,8 +44,8 @@ function BoardApp() {
 			boardId={boardId}
 			session={session}
 			justShared={justShared}
-			onShared={(id) => {
-				window.history.pushState(null, "", `/board?board=${id}`);
+			onShared={(id, key) => {
+				window.history.pushState(null, "", boardPath(id, key));
 				setJustShared(true);
 				setBoardId(id);
 			}}

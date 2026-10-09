@@ -1,6 +1,6 @@
 import { LINK_ACCESS, boardAccess, type LinkAccess } from "./access";
 import type { Sql, User } from "./db";
-import { error, json, randomHex } from "./http";
+import { error, json, linkKeyOf, randomHex, sameSecret } from "./http";
 
 /** Most people one board can have as members. */
 const MAX_MEMBERS = 200;
@@ -9,25 +9,23 @@ function inviteUrl(origin: string, boardId: string, token: string): string {
 	return `${origin}/board?board=${boardId}&invite=${token}`;
 }
 
-/** Compares two strings without exiting early on the first difference. */
-function sameToken(a: string, b: string): boolean {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-	return diff === 0;
+/** The share link: the board id plus its current key. */
+function boardUrl(origin: string, boardId: string, key: string): string {
+	return `${origin}/board?board=${boardId}&key=${key}`;
 }
 
 /**
  * GET /api/boards/:id/sharing
- * Anyone with access sees who's on the board; only the owner gets the invite
- * link and the controls.
+ * Anyone with access sees the board's sharing settings. The owner and members
+ * get the share link (people who came through the link already have it); only
+ * the owner gets the invite link and the controls.
  */
 export async function getSharing(request: Request, sql: Sql, user: User | null, id: string): Promise<Response> {
-	const access = await boardAccess(sql, id, user);
+	const access = await boardAccess(sql, id, user, linkKeyOf(request));
 	if (!access.exists) return error("Board not found.", 404);
 	if (!access.role) return error("You don't have access to this board.", 403);
-	const [board] = await sql<{ invite_token: string | null; invite_role: "edit" | "view" }[]>`
-		select invite_token, invite_role from boards where id = ${id}
+	const [board] = await sql<{ invite_token: string | null; invite_role: "edit" | "view"; link_key: string }[]>`
+		select invite_token, invite_role, link_key from boards where id = ${id}
 	`;
 	// Who's on the board is for the owner and members, not everyone who has the link
 	const people = !access.isMember
@@ -42,13 +40,15 @@ export async function getSharing(request: Request, sql: Sql, user: User | null, 
 		limit ${MAX_MEMBERS + 1}
 	`;
 	const isOwner = access.role === "owner";
+	const origin = new URL(request.url).origin;
 	return json({
 		role: access.role,
 		linkAccess: access.linkAccess,
+		linkUrl: access.isMember || access.viaLink ? boardUrl(origin, id, board.link_key) : null,
 		invite: isOwner
 			? {
 					role: board.invite_role,
-					url: board.invite_token ? inviteUrl(new URL(request.url).origin, id, board.invite_token) : null,
+					url: board.invite_token ? inviteUrl(origin, id, board.invite_token) : null,
 				}
 			: null,
 		people: people.map((p) => ({ id: p.id, name: p.name, avatarUrl: p.avatar_url, role: p.role })),
@@ -86,6 +86,22 @@ export async function resetInvite(request: Request, sql: Sql, user: User, id: st
 	return json({ url: inviteUrl(new URL(request.url).origin, id, token) });
 }
 
+/**
+ * POST /api/boards/:id/link — owner only. Gives the board a new share key: the
+ * old link stops working, and anyone on the board through it is disconnected.
+ */
+export async function resetLink(request: Request, sql: Sql, env: Env, user: User, id: string): Promise<Response> {
+	const key = randomHex(16);
+	const rows = await sql`
+		update boards set link_key = ${key}
+		where id = ${id} and owner_id = ${user.id} and deleted_at is null
+		returning id
+	`;
+	if (!rows.length) return error("Only the board's owner can reset its link.", 403);
+	await env.BOARD.get(env.BOARD.idFromName(id)).refreshAccess();
+	return json({ url: boardUrl(new URL(request.url).origin, id, key), key });
+}
+
 /** POST /api/boards/:id/join  { token } — a signed-in person accepts an invite link. */
 export async function joinBoard(request: Request, sql: Sql, user: User, id: string): Promise<Response> {
 	const body = (await request.json().catch(() => null)) as { token?: unknown } | null;
@@ -95,7 +111,7 @@ export async function joinBoard(request: Request, sql: Sql, user: User, id: stri
 	`;
 	if (!board) return error("Board not found.", 404);
 	if (board.owner_id === user.id) return json({ role: "owner" });
-	if (!board.invite_token || !sameToken(token, board.invite_token)) {
+	if (!board.invite_token || !sameSecret(token, board.invite_token)) {
 		return error("This invite link has expired. Ask the board's owner for a new one.", 403);
 	}
 	const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from board_members where board_id = ${id}`;

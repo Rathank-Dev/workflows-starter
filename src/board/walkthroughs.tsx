@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "./account";
+import { withKey } from "./linkKey";
 
 /** Matches the server's limits in worker/recordings.ts. */
 const MAX_MS = 5 * 60 * 1000;
@@ -158,7 +159,7 @@ export function WalkthroughPanel({
 
 	useEffect(() => {
 		if (!boardId) return;
-		fetch(`/api/boards/${boardId}/recordings`)
+		fetch(withKey(`/api/boards/${boardId}/recordings`))
 			.then(async (res) => {
 				const data = await res.json();
 				if (!res.ok) throw new Error(data?.error ?? "Couldn't load walkthroughs.");
@@ -272,7 +273,7 @@ export function SaveTakeDialog({
 		// XHR rather than fetch, for upload progress
 		const xhr = new XMLHttpRequest();
 		const q = new URLSearchParams({ title: title.trim() || defaultTitle, duration: String(Math.round(take.durationMs)) });
-		xhr.open("POST", `/api/boards/${boardId}/recordings?${q}`);
+		xhr.open("POST", withKey(`/api/boards/${boardId}/recordings?${q}`));
 		xhr.setRequestHeader("Content-Type", take.type);
 		xhr.upload.onprogress = (e) => e.lengthComputable && setProgress(e.loaded / e.total);
 		xhr.onload = () => {
@@ -340,7 +341,7 @@ export function PlayerDialog({
 	};
 	return (
 		<Dialog title={recording.title} labelledBy="player-title" onClose={onClose} className="video-dialog">
-			<video className="video-frame" src={`/api/recordings/${recording.id}`} controls autoPlay playsInline />
+			<video className="video-frame" src={withKey(`/api/recordings/${recording.id}`)} controls autoPlay playsInline />
 			<p className="dialog-note">
 				{recording.authorName} · {clock(recording.durationMs)} ·{" "}
 				{new Date(recording.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}

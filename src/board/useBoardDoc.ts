@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBoard, type Board } from "../../shared/board";
 import type { BoardComment, CommentOp } from "../../shared/comments";
+import { withKey } from "./linkKey";
 import { starterBoard } from "../../shared/templates";
 
 export type SyncStatus = "local" | "connecting" | "live" | "offline" | "deleted" | "denied";
@@ -197,7 +198,7 @@ export function useBoardDoc(boardId: string | null) {
 		const connect = () => {
 			setStatus((s) => (s === "live" ? "connecting" : s));
 			const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-			const socket = new WebSocket(`${protocol}//${location.host}/ws?board=${encodeURIComponent(boardId)}`);
+			const socket = new WebSocket(`${protocol}//${location.host}${withKey(`/ws?board=${encodeURIComponent(boardId)}`)}`);
 			ws.current = socket;
 
 			socket.onopen = () => {

@@ -35,6 +35,7 @@ import type { Session } from "../session";
 import { AccountButton, SignInDialog, type SignInReason } from "./account";
 import { CommentPins, CommentsPanel, NewComment, ThreadPopover, useThreads } from "./comments";
 import { CursorLayer } from "./cursors";
+import { withKey } from "./linkKey";
 import { ShareDialog } from "./ShareDialog";
 import { PlayerDialog, RecordingBar, SaveTakeDialog, WalkthroughPanel, useRecorder, type Recording, type Take } from "./walkthroughs";
 import { AssistantPanel, type AssistantContext } from "./AssistantPanel";
@@ -114,7 +115,7 @@ export function Editor({
 	/** null: the browser-only board */
 	boardId: string | null;
 	session: Session;
-	onShared: (id: string) => void;
+	onShared: (id: string, key: string) => void;
 	justShared: boolean;
 }) {
 	const doc = useBoardDoc(boardId);
@@ -890,7 +891,7 @@ export function Editor({
 		doc.commit((b) => ({ ...b, name }));
 		// The server decides who may rename; don't wait for the session to load
 		if (boardId && doc.canEdit) {
-			fetch(`/api/boards/${boardId}`, {
+			fetch(withKey(`/api/boards/${boardId}`), {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name }),
@@ -918,17 +919,17 @@ export function Editor({
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ doc: boardRef.current }),
 			});
-			const data = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+			const data = (await res.json().catch(() => null)) as { id?: string; key?: string; error?: string } | null;
 			if (res.status === 401) {
 				setSignIn("share");
 				return;
 			}
-			if (!res.ok || !data?.id) {
+			if (!res.ok || !data?.id || !data.key) {
 				say(data?.error ?? "Couldn't create a share link. Try again.");
 				return;
 			}
 			saveLocal(data.id, boardRef.current);
-			onShared(data.id);
+			onShared(data.id, data.key);
 		} catch {
 			say("Couldn't reach the server. Check your connection and try again.");
 		} finally {

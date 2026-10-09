@@ -116,3 +116,16 @@ create index if not exists recordings_user_idx on recordings (user_id);
 -- Invite rewards: each person's referral code, and who invited whom.
 alter table users add column if not exists referral_code text unique;
 alter table users add column if not exists referred_by uuid references users (id) on delete set null;
+
+-- Share keys. "Anyone with the link" access needs the board's key in the link
+-- (?key=), so the board id alone opens nothing. Resetting the key cuts off
+-- every copy of the old link. The default keeps inserts from older code working.
+alter table boards add column if not exists link_key text;
+alter table boards alter column link_key set default replace(gen_random_uuid()::text, '-', '');
+update boards set link_key = replace(gen_random_uuid()::text, '-', '') where link_key is null;
+alter table boards alter column link_key set not null;
+-- The key a visitor came in with: Recent and stars drop the board once it's reset.
+alter table board_visits add column if not exists link_key text;
+
+-- Sessions end after 7 days unused, as well as 30 days after sign-in.
+alter table sessions add column if not exists last_used_at timestamptz not null default now();

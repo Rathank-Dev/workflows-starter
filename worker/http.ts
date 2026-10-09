@@ -61,6 +61,23 @@ export function safeReturnTo(value: string | null): string {
 	}
 }
 
+/** Compares two secrets without exiting early on the first difference. */
+export function sameSecret(a: string, b: string): boolean {
+	if (a.length !== b.length) return false;
+	let diff = 0;
+	for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	return diff === 0;
+}
+
+/** A board's share key: 32 hex characters, sent as ?key= on board links and requests. */
+export const LINK_KEY = /^[a-f0-9]{32}$/;
+
+/** The share key a request carries, or null if it has none (or a malformed one). */
+export function linkKeyOf(request: Request): string | null {
+	const key = new URL(request.url).searchParams.get("key");
+	return key && LINK_KEY.test(key) ? key : null;
+}
+
 export function randomToken(bytes = 32): string {
 	const buf = crypto.getRandomValues(new Uint8Array(bytes));
 	return btoa(String.fromCharCode(...buf)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
