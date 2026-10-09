@@ -154,7 +154,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 	}
 	if (path === "/auth/logout-all" && method === "POST") {
 		const user = await currentUser(request, db());
-		return user ? logoutEverywhere(db(), user) : error("Sign in first.", 401);
+		return user ? logoutEverywhere(db(), env, user) : error("Sign in first.", 401);
 	}
 
 	if (path === "/api/dashboard" && method === "GET") {

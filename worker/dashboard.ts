@@ -1,4 +1,4 @@
-import { DELETION_GRACE_DAYS, TRASH_DAYS, boardStore, requestDeletion } from "./account";
+import { DELETION_GRACE_DAYS, TRASH_DAYS, boardStore, disconnectEverywhere, requestDeletion } from "./account";
 import { remainingUses, DAILY_LIMIT } from "./ai";
 import type { Sql, User } from "./db";
 import { SESSION_COOKIE } from "./auth";
@@ -123,9 +123,10 @@ export async function getProfile(sql: Sql, user: User): Promise<Response> {
 	});
 }
 
-/** POST /auth/logout-all — ends every session for this user, on every device. */
-export async function logoutEverywhere(sql: Sql, user: User): Promise<Response> {
+/** POST /auth/logout-all — ends every session for this user, on every device, including open boards. */
+export async function logoutEverywhere(sql: Sql, env: Env, user: User): Promise<Response> {
 	await sql`delete from sessions where user_id = ${user.id}`;
+	await disconnectEverywhere(sql, boardStore(env), user.id);
 	return new Response(null, {
 		status: 204,
 		headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
