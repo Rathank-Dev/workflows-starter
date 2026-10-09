@@ -232,6 +232,31 @@ describe("walkthrough uploads", () => {
 	});
 });
 
+describe("heartbeat", () => {
+	it("answers ping with pong, without disturbing the board", async () => {
+		const { env } = await import("cloudflare:test");
+		const stub = env.BOARD.get(env.BOARD.idFromName(`ping-${Date.now()}`));
+		const res = await stub.fetch("https://do/ws", {
+			headers: { Upgrade: "websocket", "CF-Connecting-IP": "10.9.0.2", "X-Flowyard-Role": "edit" },
+		});
+		const ws = res.webSocket!;
+		const raw: string[] = [];
+		const pong = new Promise<boolean>((resolve) => {
+			ws.addEventListener("message", (e) => {
+				raw.push(e.data as string);
+				if (e.data === "pong") resolve(true);
+			});
+			setTimeout(() => resolve(false), 1500);
+		});
+		ws.accept();
+		ws.send("ping");
+		expect(await pong).toBe(true);
+		// No error came back for the non-JSON message
+		expect(raw.some((m) => m.includes('"error"'))).toBe(false);
+		ws.close(1000);
+	});
+});
+
 describe("live cursors", () => {
 	it("relays a cursor to everyone else with the sender's name, and says when they leave", async () => {
 		const name = `cursor-${Date.now()}`;
