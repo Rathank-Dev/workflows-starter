@@ -82,7 +82,7 @@ describe.skipIf(!enabled)("with Postgres", () => {
 		expect(notOwner.status).toBe(403);
 	});
 
-	it("records a visit with its key after opening a board, and drops it from Recent once the link is reset", async () => {
+	it("records a signed-in visit with its key before the socket opens, and drops it from Recent once the link is reset", async () => {
 		const owner = await user("Owner");
 		const visitor = await user("Visitor");
 		const b = await board(owner.id);
@@ -90,20 +90,15 @@ describe.skipIf(!enabled)("with Postgres", () => {
 			headers: { Upgrade: "websocket", Origin: ORIGIN, Cookie: visitor.cookie, "CF-Connecting-IP": ip() },
 		});
 		expect(res.status).toBe(101);
+		// Recorded before the socket opened, so "Log out everywhere" can always find it
+		const [visit] = await sql<{ link_key: string | null }[]>`
+			select link_key from board_visits where user_id = ${visitor.id} and board_id = ${b.id}
+		`;
+		expect(visit?.link_key).toBe(b.key);
 		res.webSocket!.accept();
 		const hello = await new Promise<string>((resolve) => res.webSocket!.addEventListener("message", (e) => resolve(e.data as string)));
 		expect(JSON.parse(hello)).toMatchObject({ type: "hello", role: "edit" });
 		res.webSocket!.close(1000);
-
-		// The bookkeeping runs after the socket is handed back
-		let visit: { link_key: string | null } | undefined;
-		for (let i = 0; i < 20 && !visit; i++) {
-			[visit] = await sql<{ link_key: string | null }[]>`
-				select link_key from board_visits where user_id = ${visitor.id} and board_id = ${b.id}
-			`;
-			if (!visit) await new Promise((r) => setTimeout(r, 50));
-		}
-		expect(visit?.link_key).toBe(b.key);
 
 		const dashboard = async () =>
 			(
@@ -114,6 +109,31 @@ describe.skipIf(!enabled)("with Postgres", () => {
 		expect(await dashboard()).toMatchObject({ key: b.key });
 		await sql`update boards set link_key = ${randomHex(16)} where id = ${b.id}`;
 		expect(await dashboard()).toBeUndefined();
+	});
+
+	it("refuses a signed-in connection whose visit can't be recorded, so sign-out can always find it", async () => {
+		const owner = await user("Owner");
+		const visitor = await user("Unrecordable");
+		const b = await board(owner.id);
+		// Make recording this one person's visits fail, as a database error would
+		const fn = `fail_visit_${visitor.id.replaceAll("-", "")}`;
+		await sql.unsafe(`
+			create function ${fn}() returns trigger language plpgsql as $$
+			begin
+				if new.user_id = '${visitor.id}' then raise exception 'visit write failed'; end if;
+				return new;
+			end $$;
+			create trigger ${fn} before insert or update on board_visits for each row execute function ${fn}();
+		`);
+		try {
+			const res = await SELF.fetch(`${ORIGIN}/ws?board=${b.id}&key=${b.key}`, {
+				headers: { Upgrade: "websocket", Origin: ORIGIN, Cookie: visitor.cookie, "CF-Connecting-IP": ip() },
+			});
+			expect(res.status).not.toBe(101);
+			expect(res.webSocket).toBeNull();
+		} finally {
+			await sql.unsafe(`drop trigger ${fn} on board_visits; drop function ${fn}();`);
+		}
 	});
 
 	it("ends sessions after 7 days unused, and refreshes use at most hourly", async () => {

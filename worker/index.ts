@@ -337,20 +337,27 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql, ctx: E
 		// Say so over the socket: a failed upgrade would just look like being offline
 		if (!access.exists) return closedSocket({ type: "deleted" }, 4404, "Board not found");
 		if (!access.role) return closedSocket({ type: "denied", signedIn: visitor !== null }, 4403, "No access");
-		// Bookkeeping in one statement, after the socket is handed back: the board's
-		// last-opened time, and the signed-in visitor's Recent / "Shared with me"
-		// entry with the key they came in with (so it goes away if the link is reset).
-		// Issued now, so it lands before sql.end() and before any later sign-out sweep.
-		const visitKey = access.viaLink ? key : null;
-		const bookkeeping = visitor
-			? db()`
+		if (visitor) {
+			// Record the visit before the socket opens, in one statement with the
+			// board's last-opened time. "Log out everywhere" finds open sockets through
+			// board_visits, so a signed-in socket must never exist without its row:
+			// if this write fails, the connection fails. The key they came in with is
+			// kept so the Recent entry goes away if the link is reset.
+			const visitKey = access.viaLink ? key : null;
+			await db()`
 				with opened as (update boards set updated_at = now() where id = ${id})
 				insert into board_visits (user_id, board_id, link_key) values (${visitor.id}, ${id}, ${visitKey})
 				on conflict (user_id, board_id) do update set last_opened_at = now(),
 					link_key = coalesce(excluded.link_key, board_visits.link_key)
-			`
-			: db()`update boards set updated_at = now() where id = ${id}`;
-		ctx.waitUntil(Promise.resolve(bookkeeping).catch((err) => console.error("Board visit not recorded", id, err)));
+			`;
+		} else {
+			// Signed-out visitors have no session to revoke: update the time after connecting
+			ctx.waitUntil(
+				Promise.resolve(db()`update boards set updated_at = now() where id = ${id}`).catch((err) =>
+					console.error("Board open time not recorded", id, err),
+				),
+			);
+		}
 		// Tell the board who this is. Always set (or cleared) here, so a client can't supply its own.
 		const headers = new Headers(request.headers);
 		headers.set(ROLE_HEADER, access.role);
