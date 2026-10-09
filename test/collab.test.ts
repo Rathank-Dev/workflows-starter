@@ -88,6 +88,52 @@ describe("board roles", () => {
 		expect(owner.closed?.()).toBeNull();
 		owner.ws!.close(1000);
 	});
+
+	it("drops a signed-out person's sockets, owner included, and no one else's", async () => {
+		const { env } = await import("cloudflare:test");
+		const name = `signout-${Date.now()}`;
+		const ada = await join(name, "owner", { id: "u-ada", name: "Ada" });
+		const adaTab = await join(name, "edit", { id: "u-ada", name: "Ada" });
+		const bob = await join(name, "edit", { id: "u-bob", name: "Bob" });
+		const guest = await join(name, "view");
+		await Promise.all([ada.next("hello"), adaTab.next("hello"), bob.next("hello"), guest.next("hello")]);
+		await env.BOARD.get(env.BOARD.idFromName(name)).disconnectUser("u-ada");
+		await settle();
+		expect(ada.closed?.()?.code).toBe(4001);
+		expect(adaTab.closed?.()?.code).toBe(4001);
+		expect(bob.closed?.()).toBeNull();
+		expect(guest.closed?.()).toBeNull();
+		bob.ws!.close(1000);
+		guest.ws!.close(1000);
+	});
+});
+
+describe("signing out everywhere", () => {
+	it("disconnects the person from every board they own or have opened", async () => {
+		const { disconnectEverywhere } = await import("../worker/account");
+		const queries: string[] = [];
+		const sql = ((strings: TemplateStringsArray) => {
+			queries.push(strings.join("?"));
+			return Promise.resolve([{ id: "b1" }, { id: "b2" }, { id: "b3" }]);
+		}) as unknown as Parameters<typeof disconnectEverywhere>[0];
+		const dropped: [string, string][] = [];
+		const store = {
+			deleteBoard: async () => {},
+			disconnectAll: async () => {},
+			deleteFiles: async () => {},
+			disconnectUser: async (board: string, user: string) => {
+				dropped.push([board, user]);
+			},
+		};
+		await disconnectEverywhere(sql, store, "u-ada");
+		expect(queries.join()).toMatch(/board_visits/);
+		expect(queries.join()).toMatch(/owner_id/);
+		expect(dropped).toEqual([
+			["b1", "u-ada"],
+			["b2", "u-ada"],
+			["b3", "u-ada"],
+		]);
+	});
 });
 
 describe("comments", () => {
