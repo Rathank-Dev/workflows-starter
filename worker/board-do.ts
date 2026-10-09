@@ -273,14 +273,16 @@ export class BoardDO extends DurableObject<Env> {
 	private onCursor(ws: WebSocket, data: { x?: unknown; y?: unknown }): void {
 		const peer = peerOf(ws);
 		if (!peer.sid) return;
-		if (data.x === null) {
+		const { x, y } = data;
+		const valid = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= CURSOR_LIMIT;
+		const hide = x === null;
+		if (!hide && (!valid(x) || !valid(y))) return;
+		// Hides fan out to everyone too, so they share the budget
+		if (!take(this.cursorBuckets, ws, CURSOR_RATE, CURSOR_BURST)) return;
+		if (hide) {
 			this.broadcast({ type: "cursor:gone", id: peer.sid }, ws);
 			return;
 		}
-		const { x, y } = data;
-		const valid = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= CURSOR_LIMIT;
-		if (!valid(x) || !valid(y)) return;
-		if (!take(this.cursorBuckets, ws, CURSOR_RATE, CURSOR_BURST)) return;
 		this.broadcast({ type: "cursor", id: peer.sid, name: peer.name, x, y }, ws);
 	}
 

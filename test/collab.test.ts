@@ -230,4 +230,22 @@ describe("live cursors", () => {
 		a.ws!.close(1000);
 		b.ws!.close(1000);
 	});
+
+	it("rate-limits cursor moves and hides alike", async () => {
+		const name = `cursor-flood-${Date.now()}`;
+		const a = await join(name, "edit");
+		const b = await join(name, "edit");
+		await a.next("hello");
+		await b.next("hello");
+		for (let i = 0; i < 400; i++) {
+			a.ws!.send(JSON.stringify(i % 2 ? { type: "cursor", x: i, y: i } : { type: "cursor", x: null }));
+		}
+		await new Promise((r) => setTimeout(r, 500));
+		const relayed = b.messages.filter((m) => m.type === "cursor" || m.type === "cursor:gone").length;
+		// A burst of 60, plus what refills at 30 a second while the test runs
+		expect(relayed).toBeGreaterThan(0);
+		expect(relayed).toBeLessThanOrEqual(100);
+		a.ws!.close(1000);
+		b.ws!.close(1000);
+	});
 });
