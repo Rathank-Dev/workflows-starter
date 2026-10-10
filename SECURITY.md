@@ -2,7 +2,7 @@
 
 ## Reporting a problem
 
-Please report vulnerabilities privately through GitHub: the repository's **Security** tab → **Report a vulnerability**. Don't open a public issue. Include the steps to reproduce and what an attacker could do. You'll get a reply within a few days, and credit in the fix if you'd like it.
+Please report vulnerabilities privately through GitHub: the repository's **Security** tab → **Report a vulnerability**. If you can't use GitHub, email support@flowyard.dev. Don't open a public issue. Include the steps to reproduce and what an attacker could do. You'll get a reply within a few days, and credit in the fix if you'd like it.
 
 ## How Flowyard is protected
 

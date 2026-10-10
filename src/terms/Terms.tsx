@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Mark } from "../board/icons";
+import { LEGAL_UPDATED, SUPPORT_EMAIL } from "../contact";
 import "../privacy/privacy.css";
 
 /** Plain-language terms, kept in step with how the app actually behaves. */
@@ -71,6 +72,7 @@ export function Terms() {
 					</a>
 					.
 				</p>
+				<p className="pv-updated">Last updated {LEGAL_UPDATED}</p>
 
 				{SECTIONS.map(([heading, items], i) => (
 					<section key={heading} aria-labelledby={`tos-${i}`}>
@@ -85,6 +87,17 @@ export function Terms() {
 						</ul>
 					</section>
 				))}
+
+				<section aria-labelledby="tos-contact">
+					<h2 id="tos-contact">Contact</h2>
+					<p>
+						Questions about these terms, account requests, or reports of content that breaks them:{" "}
+						<a className="pv-link" href={`mailto:${SUPPORT_EMAIL}`}>
+							{SUPPORT_EMAIL}
+						</a>
+						.
+					</p>
+				</section>
 			</main>
 		</div>
 	);

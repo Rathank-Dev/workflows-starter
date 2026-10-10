@@ -3,6 +3,7 @@ import { TEMPLATES } from "../../shared/templates";
 import { AccountButton } from "../board/account";
 import { FlowPreview } from "../board/FlowPreview";
 import { Mark } from "../board/icons";
+import { SUPPORT_EMAIL } from "../contact";
 import { useSession } from "../session";
 import "./landing.css";
 
@@ -369,6 +370,7 @@ export function Landing() {
 					<a href="#templates">Templates</a>
 					<a href="/privacy">Privacy</a>
 					<a href="/terms">Terms</a>
+					<a href={`mailto:${SUPPORT_EMAIL}`}>Contact</a>
 				</nav>
 				<span>© {new Date().getFullYear()} Flowyard</span>
 			</footer>
