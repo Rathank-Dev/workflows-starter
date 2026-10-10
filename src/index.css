@@ -2200,6 +2200,80 @@ button.text-link:disabled {
 	}
 }
 
+/* Cookie banner: every page, until a choice is made */
+.cookie-banner {
+	position: fixed;
+	left: 50%;
+	bottom: 16px;
+	translate: -50% 0;
+	z-index: 60;
+	width: min(640px, calc(100vw - 32px));
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 14px 16px;
+	border: 1px solid var(--chrome-line);
+	border-radius: 6px;
+	background: var(--chrome);
+	color: var(--ink);
+	box-shadow: var(--shadow);
+	font: 14px/1.5 var(--font-ui);
+}
+
+.cookie-banner p {
+	margin: 0;
+	flex: 1;
+}
+
+.cookie-banner a {
+	color: var(--teal);
+}
+
+.cookie-actions {
+	display: flex;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.cookie-btn {
+	border: 1px solid var(--chrome-line);
+	border-radius: 3px;
+	background: transparent;
+	color: var(--ink);
+	font: 500 11px/1 var(--font-mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	padding: 11px 12px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.cookie-btn:hover {
+	background: var(--chrome-hover);
+}
+
+.cookie-btn-primary {
+	border-color: var(--action);
+	background: var(--action);
+	color: var(--on-action);
+}
+
+.cookie-btn-primary:hover {
+	background: var(--action);
+	filter: brightness(1.08);
+}
+
+@media (max-width: 560px) {
+	.cookie-banner {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.cookie-actions > * {
+		flex: 1;
+	}
+}
+
 /* ------------------------------------------------------------------ */
 /* Shared by every page: account menu, avatars, badges, error text      */
 /* (pages load their own stylesheets, so these can't live in one page's) */

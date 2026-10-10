@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import { parseBoard, type Board } from "../shared/board";
-import { TEMPLATES, buildTemplate, frameToSpec, specToTemplate, starterBoard, validateFlowSpec } from "../shared/templates";
+import { TEMPLATES, buildTemplate, frameToSpec, specToTemplate, validateFlowSpec } from "../shared/templates";
 
 function stub(name: string) {
 	return env.BOARD.get(env.BOARD.idFromName(name));
@@ -15,10 +15,6 @@ describe("templates", () => {
 			expect(parsed, t.id).not.toBeNull();
 			expect(parsed!.elements).toHaveLength(board.elements.length);
 		}
-	});
-
-	it("starter board is valid", () => {
-		expect(parseBoard(starterBoard())).not.toBeNull();
 	});
 });
 
@@ -54,7 +50,7 @@ describe("BoardDO", () => {
 		const s = stub(`test-${Date.now()}`);
 		expect(await s.getBoard()).toEqual({ doc: null, rev: 0 });
 
-		const board = starterBoard();
+		const board: Board = { v: 1, name: "Saved", elements: buildTemplate(TEMPLATES[0], { x: 0, y: 0 }) };
 		expect(await s.saveBoard(board)).toBe(1);
 		const { doc, rev } = await s.getBoard();
 		expect(rev).toBe(1);

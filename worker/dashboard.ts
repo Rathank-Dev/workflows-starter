@@ -1,11 +1,16 @@
-import { DELETION_GRACE_DAYS, TRASH_DAYS, boardStore, requestDeletion } from "./account";
+import { DELETION_GRACE_DAYS, TRASH_DAYS, boardStore, disconnectEverywhere, requestDeletion } from "./account";
 import { remainingUses, DAILY_LIMIT } from "./ai";
 import type { Sql, User } from "./db";
 import { SESSION_COOKIE } from "./auth";
-import { error, json, setCookie } from "./http";
+import { CLEAR_CACHE, error, json, setCookie } from "./http";
 
 export interface DashboardBoard {
 	id: string;
+	/**
+	 * The share key, for the owner and for people who came in with it. Members
+	 * open boards through membership and aren't given a key they never had.
+	 */
+	key: string | null;
 	name: string;
 	is_owner: boolean;
 	owner_name: string;
@@ -23,7 +28,8 @@ export interface DashboardBoard {
  */
 export async function listDashboard(sql: Sql, user: User): Promise<Response> {
 	const boards = await sql<DashboardBoard[]>`
-		select b.id, b.name, b.created_at, b.updated_at, b.deleted_at,
+		select b.id, b.name,
+			(case when b.owner_id = ${user.id} or v.link_key = b.link_key then b.link_key end) as key, b.created_at, b.updated_at, b.deleted_at,
 			(b.owner_id = ${user.id}) as is_owner,
 			u.name as owner_name,
 			v.last_opened_at,
@@ -33,11 +39,11 @@ export async function listDashboard(sql: Sql, user: User): Promise<Response> {
 		left join board_visits v on v.board_id = b.id and v.user_id = ${user.id}
 		left join board_stars s on s.board_id = b.id and s.user_id = ${user.id}
 		-- Other people's boards only while the user can still open them: as a
-		-- member, or as a past visitor while the link isn't locked
+		-- member, or as a past visitor while the link is on and hasn't been reset
 		where b.owner_id = ${user.id}
 			or (b.deleted_at is null and (
 				exists (select 1 from board_members m where m.board_id = b.id and m.user_id = ${user.id})
-				or (v.user_id is not null and b.link_access <> 'none')))
+				or (v.link_key = b.link_key and b.link_access <> 'none')))
 		order by coalesce(v.last_opened_at, b.updated_at) desc
 		limit 500
 	`;
@@ -59,7 +65,10 @@ export async function setStar(request: Request, sql: Sql, user: User, id: string
 			and (b.owner_id = ${user.id}
 				or exists (select 1 from board_members m where m.board_id = b.id and m.user_id = ${user.id})
 				or (b.link_access <> 'none'
-					and exists (select 1 from board_visits v where v.board_id = b.id and v.user_id = ${user.id})))
+					and exists (
+						select 1 from board_visits v
+						where v.board_id = b.id and v.user_id = ${user.id} and v.link_key = b.link_key
+					)))
 		on conflict do nothing
 		returning board_id
 	`;
@@ -114,10 +123,14 @@ export async function getProfile(sql: Sql, user: User): Promise<Response> {
 	});
 }
 
-/** POST /auth/logout-all — ends every session for this user, on every device. */
-export async function logoutEverywhere(sql: Sql, user: User): Promise<Response> {
+/** POST /auth/logout-all — ends every session for this user, on every device, including open boards. */
+export async function logoutEverywhere(sql: Sql, env: Env, user: User): Promise<Response> {
 	await sql`delete from sessions where user_id = ${user.id}`;
-	return new Response(null, { status: 204, headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }) } });
+	await disconnectEverywhere(sql, boardStore(env), user.id);
+	return new Response(null, {
+		status: 204,
+		headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
+	});
 }
 
 /**
@@ -132,6 +145,6 @@ export async function deleteAccount(request: Request, sql: Sql, env: Env, user: 
 	return json(
 		{ deleteAt, graceDays: DELETION_GRACE_DAYS },
 		200,
-		{ "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }) },
+		{ "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
 	);
 }

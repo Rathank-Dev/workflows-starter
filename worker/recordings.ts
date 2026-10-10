@@ -1,6 +1,6 @@
 import { boardAccess, canEdit } from "./access";
 import type { Sql, User } from "./db";
-import { SECURITY_HEADERS, error, json, randomHex } from "./http";
+import { SECURITY_HEADERS, error, json, linkKeyOf, randomHex } from "./http";
 
 /** Largest walkthrough upload: about 5 minutes of screen video at typical browser bitrates. */
 export const MAX_RECORDING_BYTES = 80 * 1024 * 1024;
@@ -34,8 +34,8 @@ async function remaining(sql: Sql, userId: string): Promise<number> {
 }
 
 /** GET /api/boards/:id/recordings — anyone with access to the board. */
-export async function listRecordings(sql: Sql, user: User | null, boardId: string): Promise<Response> {
-	const access = await boardAccess(sql, boardId, user);
+export async function listRecordings(request: Request, sql: Sql, user: User | null, boardId: string): Promise<Response> {
+	const access = await boardAccess(sql, boardId, user, linkKeyOf(request));
 	if (!access.exists) return error("Board not found.", 404);
 	if (!access.role) return error("You don't have access to this board.", 403);
 	const items = await sql<
@@ -67,7 +67,7 @@ export async function listRecordings(sql: Sql, user: User | null, boardId: strin
  * Signed-in editors only, within the Free plan's limit.
  */
 export async function uploadRecording(request: Request, sql: Sql, env: Env, user: User, boardId: string): Promise<Response> {
-	const access = await boardAccess(sql, boardId, user);
+	const access = await boardAccess(sql, boardId, user, linkKeyOf(request));
 	if (!access.exists) return error("Board not found.", 404);
 	if (!canEdit(access.role)) return error("Only people who can edit this board can record walkthroughs.", 403);
 
@@ -145,7 +145,7 @@ export async function playRecording(request: Request, sql: Sql, env: Env, user: 
 		select board_id, content_type from recordings where id = ${id}
 	`;
 	if (!rec) return error("Recording not found.", 404);
-	const access = await boardAccess(sql, rec.board_id, user);
+	const access = await boardAccess(sql, rec.board_id, user, linkKeyOf(request));
 	if (!access.role) return error("Recording not found.", 404);
 
 	const key = objectKey(rec.board_id, id);

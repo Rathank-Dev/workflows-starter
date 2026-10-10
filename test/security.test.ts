@@ -1,5 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { linkRole } from "../worker/access";
+import { linkKeyOf } from "../worker/http";
 
 const ORIGIN = "https://example.com";
 
@@ -153,5 +155,73 @@ describe("auth cookies", () => {
 			headers: { Origin: ORIGIN, "CF-Connecting-IP": "10.0.0.7" },
 		});
 		expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-lw_session=; Path=\/; Max-Age=0; HttpOnly; Secure; SameSite=Lax$/);
+	});
+});
+
+describe("share keys", () => {
+	const key = "0123456789abcdef0123456789abcdef";
+
+	it("grants link access only with the board's current key", () => {
+		expect(linkRole("edit", key, key)).toBe("edit");
+		expect(linkRole("view", key, key)).toBe("view");
+		// The board id alone, a wrong key, or an old key after a reset: nothing
+		expect(linkRole("edit", key, null)).toBeNull();
+		expect(linkRole("edit", key, "f".repeat(32))).toBeNull();
+		expect(linkRole("edit", key, key.slice(0, 31))).toBeNull();
+		// A locked link stays locked even with the key
+		expect(linkRole("none", key, key)).toBeNull();
+	});
+
+	it("reads only well-formed keys from a request", () => {
+		const req = (q: string) => new Request(`${ORIGIN}/ws?board=${"a".repeat(32)}${q}`);
+		expect(linkKeyOf(req(`&key=${key}`))).toBe(key);
+		expect(linkKeyOf(req(""))).toBeNull();
+		expect(linkKeyOf(req(`&key=${key.toUpperCase()}`))).toBeNull();
+		expect(linkKeyOf(req("&key=' or 1=1--"))).toBeNull();
+	});
+});
+
+describe("cookies", () => {
+	const post = (path: string, body: unknown, origin = ORIGIN) =>
+		SELF.fetch(`${ORIGIN}${path}`, {
+			method: "POST",
+			headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": "10.7.0.1" },
+			body: JSON.stringify(body),
+		});
+
+	it("treats a malformed session cookie as signed out, not a server error", async () => {
+		const res = await SELF.fetch(`${ORIGIN}/api/me`, {
+			headers: { Cookie: "__Host-lw_session=%E0%A4%A", "CF-Connecting-IP": "10.7.0.2" },
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({ user: null });
+	});
+
+	it("keeps no referral cookie until the visitor agrees", async () => {
+		const landing = await SELF.fetch(`${ORIGIN}/r/abcd2345`, { redirect: "manual", headers: { "CF-Connecting-IP": "10.7.0.3" } });
+		expect(landing.status).toBe(302);
+		expect(landing.headers.get("Location")).toBe("/?ref=abcd2345");
+		expect(landing.headers.get("Set-Cookie")).toBeNull();
+
+		const agreed = await post("/api/referral/remember", { code: "abcd2345" });
+		expect(agreed.status).toBe(204);
+		const cookie = agreed.headers.get("Set-Cookie") ?? "";
+		expect(cookie).toMatch(/^__Host-lw_ref=abcd2345;/);
+		expect(cookie).toMatch(/HttpOnly/);
+		expect(cookie).toMatch(/Secure/);
+		expect(cookie).toMatch(/SameSite=Lax/);
+
+		expect((await post("/api/referral/remember", { code: "<script>" })).status).toBe(400);
+		expect((await post("/api/referral/remember", { code: "abcd2345" }, "https://evil.example")).status).toBe(403);
+	});
+
+	it("clears the browser's cache for this site on sign-out", async () => {
+		const res = await SELF.fetch(`${ORIGIN}/auth/logout`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, "CF-Connecting-IP": "10.7.0.4" },
+		});
+		expect(res.status).toBe(204);
+		expect(res.headers.get("Clear-Site-Data")).toBe('"cache"');
+		expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-lw_session=; .*Max-Age=0/);
 	});
 });

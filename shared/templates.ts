@@ -301,18 +301,6 @@ export const TEMPLATES: FlowTemplate[] = [
 ];
 
 /** The board a new visitor sees: three flows side by side. */
-export function starterBoard(): Board {
-	const elements: BoardEl[] = [];
-	let x = 0;
-	for (const id of ["oauth-pkce", "request-lifecycle", "incident-response"]) {
-		const t = TEMPLATES.find((t) => t.id === id)!;
-		elements.push(...buildTemplate(t, { x, y: 0 }));
-		x += templateSize(t).w + 120;
-	}
-	elements.sort((a, b) => Number(b.type === "frame") - Number(a.type === "frame"));
-	return { v: 1, name: "Security architecture", elements };
-}
-
 /* ------------------------------------------------------------------ */
 /* Flow specs: the JSON shape the AI assistant reads and writes        */
 /* ------------------------------------------------------------------ */

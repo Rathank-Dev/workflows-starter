@@ -179,6 +179,22 @@ export class BoardDO extends DurableObject<Env> {
 		}
 	}
 
+	/**
+	 * The person's sessions were revoked (signed out everywhere, or account
+	 * deleted): drop their sockets, the owner's too. Their clients reconnect
+	 * and the Worker checks access again without the old session.
+	 */
+	async disconnectUser(userId: string): Promise<void> {
+		for (const socket of this.ctx.getWebSockets()) {
+			if (peerOf(socket).userId !== userId) continue;
+			try {
+				socket.close(4001, "Signed out");
+			} catch {
+				// Already closed
+			}
+		}
+	}
+
 	/** Disconnects everyone viewing (board moved to trash). Content is kept for restore. */
 	async disconnectAll(): Promise<void> {
 		for (const socket of this.ctx.getWebSockets()) {

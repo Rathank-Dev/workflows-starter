@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "../session";
 import { Avatar, Dialog } from "./account";
+import { boardPath, linkKey, withKey } from "./linkKey";
 import type { BoardRole, Person } from "./useBoardDoc";
 
 type LinkAccess = "edit" | "view" | "none";
@@ -9,6 +10,8 @@ type Tab = "invite" | "rewards";
 interface Sharing {
   role: BoardRole;
   linkAccess: LinkAccess;
+  /** The board's share link with its key; null for people who came through the link. */
+  linkUrl: string | null;
   invite: { role: "edit" | "view"; url: string | null } | null;
   people: {
     id: string;
@@ -124,11 +127,10 @@ function InviteTab({
   const [data, setData] = useState<Sharing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const boardLink = `${window.location.origin}/board?board=${boardId}`;
 
   const load = useCallback(async () => {
     try {
-      setData(await api<Sharing>(`/api/boards/${boardId}/sharing`));
+      setData(await api<Sharing>(withKey(`/api/boards/${boardId}/sharing`)));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -162,6 +164,9 @@ function InviteTab({
   if (!data) return <p className="dialog-note">Loading…</p>;
 
   const isOwner = data.role === "owner";
+  // Only the owner is sent the key; people who came through the link have it in this page's address
+  const pageKey = linkKey();
+  const boardLink = data.linkUrl ?? (pageKey ? `${window.location.origin}${boardPath(boardId, pageKey)}` : null);
   const hereIds = new Set(here.map((p) => p.id));
   const invite = data.invite;
   const mail = (url: string) =>
@@ -314,27 +319,48 @@ function InviteTab({
           )}
         </div>
         <p className="share-help">{LINK_HELP[data.linkAccess]}</p>
-        <div className="share-row">
-          <input
-            readOnly
-            value={boardLink}
-            aria-label="Board link"
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={async () =>
-              say(
-                (await copyText(boardLink))
-                  ? "Board link copied"
-                  : "Select the link and copy it",
-              )
-            }
-          >
-            Copy
-          </button>
-        </div>
+        {boardLink ? (
+          <div className="share-row">
+            <input
+              readOnly
+              value={boardLink}
+              aria-label="Board link"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={async () =>
+                say(
+                  (await copyText(boardLink))
+                    ? "Board link copied"
+                    : "Select the link and copy it",
+                )
+              }
+            >
+              Copy
+            </button>
+          </div>
+        ) : (
+          data.linkAccess !== "none" && <p className="share-help">Ask the board's owner for the link.</p>
+        )}
+        {isOwner && (
+          <div className="share-links">
+            <button
+              type="button"
+              className="text-link"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const { key } = await api<{ key: string }>(`/api/boards/${boardId}/link`, { method: "POST" });
+                  window.history.replaceState(null, "", boardPath(boardId, key));
+                }, "New board link created. The old one no longer works.")
+              }
+            >
+              Reset link
+            </button>
+          </div>
+        )}
       </section>
 
       {data.people.length > 0 && (

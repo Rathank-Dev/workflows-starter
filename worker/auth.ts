@@ -1,8 +1,8 @@
 import { Discord, GitHub, Google, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
-import { cancelPendingDeletion } from "./account";
+import { SESSION_IDLE_DAYS, cancelPendingDeletion } from "./account";
 import { REFERRAL_COOKIE, referralFrom } from "./referrals";
 import type { Sql, User } from "./db";
-import { error, getCookie, randomToken, safeReturnTo, setCookie, sha256Hex } from "./http";
+import { CLEAR_CACHE, error, getCookie, randomToken, safeReturnTo, setCookie, sha256Hex } from "./http";
 
 export type Provider = "github" | "google" | "discord";
 const PROVIDERS: Provider[] = ["github", "google", "discord"];
@@ -215,16 +215,24 @@ async function upsertUser(sql: Sql, provider: Provider, p: Profile, referralCode
 	}) as Promise<User>;
 }
 
-/** The signed-in user for this request, or null. */
+/**
+ * The signed-in user for this request, or null. A session lasts 30 days from
+ * sign-in, and ends sooner if it goes 7 days unused. Use is recorded at most
+ * hourly, so most requests don't write.
+ */
 export async function currentUser(request: Request, sql: Sql): Promise<User | null> {
 	const token = getCookie(request, SESSION_COOKIE);
 	if (!token || token.length > 200) return null;
-	const [user] = await sql<User[]>`
-		select u.id, u.name, u.email, u.avatar_url
+	const id = await sha256Hex(token);
+	const [row] = await sql<(User & { stale: boolean })[]>`
+		select u.id, u.name, u.email, u.avatar_url, s.last_used_at < now() - interval '1 hour' as stale
 		from sessions s join users u on u.id = s.user_id
-		where s.id = ${await sha256Hex(token)} and s.expires_at > now()
+		where s.id = ${id} and s.expires_at > now()
+			and s.last_used_at > now() - make_interval(days => ${SESSION_IDLE_DAYS})
 	`;
-	return user ?? null;
+	if (!row) return null;
+	if (row.stale) await sql`update sessions set last_used_at = now() where id = ${id}`;
+	return { id: row.id, name: row.name, email: row.email, avatar_url: row.avatar_url };
 }
 
 /** POST /auth/logout */
@@ -233,6 +241,6 @@ export async function logout(request: Request, sql: Sql): Promise<Response> {
 	if (token) await sql`delete from sessions where id = ${await sha256Hex(token)}`;
 	return new Response(null, {
 		status: 204,
-		headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }) },
+		headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
 	});
 }

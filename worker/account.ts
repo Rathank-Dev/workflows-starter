@@ -5,12 +5,16 @@ import { deleteBoardRecordings } from "./recordings";
 export const DELETION_GRACE_DAYS = 30;
 /** Trashed boards are deleted for good after this many days. */
 export const TRASH_DAYS = 30;
+/** A session ends after this many days without use (and 30 days after sign-in regardless). */
+export const SESSION_IDLE_DAYS = 7;
 
 /** Minimal Durable Object access, so this module also runs outside the Worker (tests, scripts). */
 export interface BoardStore {
 	/** Erases the board's content, comments, and walkthrough videos. */
 	deleteBoard(id: string): Promise<void>;
 	disconnectAll(id: string): Promise<void>;
+	/** Closes one person's live connections to a board. */
+	disconnectUser(id: string, userId: string): Promise<void>;
 	/** Deletes stored files (walkthrough videos) by key. */
 	deleteFiles(keys: string[]): Promise<void>;
 }
@@ -23,10 +27,31 @@ export function boardStore(env: Env): BoardStore {
 			await deleteBoardRecordings(env, id);
 		},
 		disconnectAll: (id) => stub(id).disconnectAll(),
+		disconnectUser: (id, userId) => stub(id).disconnectUser(userId),
 		deleteFiles: async (keys) => {
 			for (let i = 0; i < keys.length; i += 1000) await env.RECORDINGS.delete(keys.slice(i, i + 1000));
 		},
 	};
+}
+
+/** How many boards to disconnect from at once when sessions are revoked. */
+const DISCONNECT_BATCH = 20;
+
+/**
+ * Sessions were revoked: close the person's live connections everywhere.
+ * A board socket is authorized once, when it opens, so without this an open
+ * tab (perhaps on a stolen session) keeps editing after "Log out everywhere".
+ * Every signed-in connection is recorded in board_visits, owners included.
+ */
+export async function disconnectEverywhere(sql: Sql, store: BoardStore, userId: string): Promise<void> {
+	const boards = await sql<{ id: string }[]>`
+		select board_id as id from board_visits where user_id = ${userId}
+		union
+		select id from boards where owner_id = ${userId}
+	`;
+	for (let i = 0; i < boards.length; i += DISCONNECT_BATCH) {
+		await Promise.all(boards.slice(i, i + DISCONNECT_BATCH).map((b) => store.disconnectUser(b.id, userId)));
+	}
 }
 
 /**
@@ -51,6 +76,8 @@ export async function requestDeletion(sql: Sql, store: BoardStore, userId: strin
 	});
 	// Close live connections so shared links stop working right away
 	for (const id of trashed) await store.disconnectAll(id);
+	// And their own open tabs on other people's boards
+	await disconnectEverywhere(sql, store, userId);
 	return deleteAt;
 }
 
@@ -104,6 +131,9 @@ export async function purgeDue(sql: Sql, store: BoardStore): Promise<{ accounts:
 	// Usage counters only matter for today
 	await sql`delete from ai_usage where day < current_date - 7`;
 	await sql`delete from ai_ip_usage where day < current_date - 7`;
-	await sql`delete from sessions where expires_at < now()`;
+	await sql`
+		delete from sessions
+		where expires_at < now() or last_used_at < now() - make_interval(days => ${SESSION_IDLE_DAYS})
+	`;
 	return { accounts: users.length, boards };
 }

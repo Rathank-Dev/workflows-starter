@@ -23,9 +23,9 @@ import {
 	playRecording,
 	uploadRecording,
 } from "./recordings";
-import { getReferral, referralLanding } from "./referrals";
-import { getSharing, joinBoard, resetInvite, updateMember, updateSharing } from "./sharing";
-import { SECURITY_HEADERS, error, json, randomHex, sameOrigin } from "./http";
+import { getReferral, referralLanding, rememberReferral } from "./referrals";
+import { getSharing, joinBoard, resetInvite, resetLink, updateMember, updateSharing } from "./sharing";
+import { SECURITY_HEADERS, error, json, linkKeyOf, randomHex, sameOrigin } from "./http";
 
 export { BoardDO } from "./board-do";
 import { boardStore, purgeDue } from "./account";
@@ -70,6 +70,7 @@ async function limited(limiter: RateLimit | undefined, key: string): Promise<boo
  * - GET|PATCH    /api/boards/:id/sharing            Link access, invite link, people
  * - POST         /api/boards/:id/invite             New invite link (owner)
  * - POST         /api/boards/:id/join               Accept an invite link
+ * - POST         /api/boards/:id/link               New share key; the old link stops working (owner)
  * - PATCH|DELETE /api/boards/:id/members/:userId    Change a role, remove someone, or leave
  *
  * Walkthroughs (video in R2)
@@ -79,6 +80,7 @@ async function limited(limiter: RateLimit | undefined, key: string): Promise<boo
  * Invite rewards
  * - GET /r/:code         Referral link; remembers the inviter
  * - GET /api/referral    Your referral link and count
+ * - POST /api/referral/remember   Keep the referral cookie (after cookie consent)
  *
  * Assistant
  * - POST /api/ai             Sign-in required
@@ -152,7 +154,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 	}
 	if (path === "/auth/logout-all" && method === "POST") {
 		const user = await currentUser(request, db());
-		return user ? logoutEverywhere(db(), user) : error("Sign in first.", 401);
+		return user ? logoutEverywhere(db(), env, user) : error("Sign in first.", 401);
 	}
 
 	if (path === "/api/dashboard" && method === "GET") {
@@ -168,13 +170,14 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		return user ? deleteAccount(request, db(), env, user) : error("Sign in first.", 401);
 	}
 
+	if (path === "/api/referral/remember" && method === "POST") return rememberReferral(request);
 	if (path === "/api/referral" && method === "GET") {
 		const user = await currentUser(request, db());
 		return user ? getReferral(request, db(), user) : error("Sign in to get your invite link.", 401);
 	}
 
 	// Sharing
-	const sharing = path.match(/^\/api\/boards\/([a-f0-9]{32})\/(sharing|invite|join)$/);
+	const sharing = path.match(/^\/api\/boards\/([a-f0-9]{32})\/(sharing|invite|join|link)$/);
 	if (sharing) {
 		const [, id, verb] = sharing;
 		const user = await currentUser(request, db());
@@ -183,6 +186,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		if (verb === "sharing" && method === "PATCH") return updateSharing(request, db(), env, user, id);
 		if (verb === "invite" && method === "POST") return resetInvite(request, db(), user, id);
 		if (verb === "join" && method === "POST") return joinBoard(request, db(), user, id);
+		if (verb === "link" && method === "POST") return resetLink(request, db(), env, user, id);
 		return error("Method not allowed", 405);
 	}
 	const member = path.match(/^\/api\/boards\/([a-f0-9]{32})\/members\/([0-9a-f-]{36})$/);
@@ -195,7 +199,7 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 	const recs = path.match(RECORDING_PATH);
 	if (recs) {
 		const user = await currentUser(request, db());
-		if (method === "GET") return listRecordings(db(), user, recs[1]);
+		if (method === "GET") return listRecordings(request, db(), user, recs[1]);
 		if (method === "POST") {
 			return user ? uploadRecording(request, db(), env, user, recs[1]) : error("Sign in to record a walkthrough.", 401);
 		}
@@ -269,13 +273,14 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 			}
 
 			const id = randomHex(16);
-			await db()`insert into boards (id, owner_id, name) values (${id}, ${user.id}, ${doc.name})`;
+			const key = randomHex(16);
+			await db()`insert into boards (id, owner_id, name, link_key) values (${id}, ${user.id}, ${doc.name}, ${key})`;
 			const rev = await env.BOARD.get(env.BOARD.idFromName(id)).saveBoard(doc);
 			if (rev === null) {
 				await db()`delete from boards where id = ${id}`;
 				return error("Board is malformed or too large.", 422);
 			}
-			return json({ id }, 201);
+			return json({ id, key }, 201);
 		}
 		return error("Method not allowed", 405);
 	}
@@ -291,7 +296,9 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 			const name = typeof body?.name === "string" ? body.name.trim().slice(0, 120) : "";
 			if (!name) return error("Give the board a name.", 400);
 			// Anyone who can edit can rename (the name is part of the board), so the dashboard stays in step
-			if (!canEdit((await boardAccess(db(), id, user)).role)) return error("You can't rename this board.", 403);
+			if (!canEdit((await boardAccess(db(), id, user, linkKeyOf(request))).role)) {
+				return error("You can't rename this board.", 403);
+			}
 			await db()`update boards set name = ${name}, updated_at = now() where id = ${id}`;
 			return json({ ok: true });
 		}
@@ -325,16 +332,20 @@ async function route(request: Request, env: Env, url: URL, db: () => Sql): Promi
 		if (origin !== null && origin !== url.origin) return new Response("Cross-site connection blocked", { status: 403 });
 		// Only boards someone signed in to create, and not in the trash, open live.
 		const visitor = await currentUser(request, db());
-		const access = await boardAccess(db(), id, visitor);
+		const key = linkKeyOf(request);
+		const access = await boardAccess(db(), id, visitor, key);
 		// Say so over the socket: a failed upgrade would just look like being offline
 		if (!access.exists) return closedSocket({ type: "deleted" }, 4404, "Board not found");
 		if (!access.role) return closedSocket({ type: "denied", signedIn: visitor !== null }, 4403, "No access");
 		await db()`update boards set updated_at = now() where id = ${id}`;
-		// Remember it for the signed-in visitor's Recent and "Shared with me"
+		// Remember it for the signed-in visitor's Recent and "Shared with me", with
+		// the key they came in with, so the entry goes away if the link is reset
 		if (visitor) {
+			const visitKey = access.viaLink ? key : null;
 			await db()`
-				insert into board_visits (user_id, board_id) values (${visitor.id}, ${id})
-				on conflict (user_id, board_id) do update set last_opened_at = now()
+				insert into board_visits (user_id, board_id, link_key) values (${visitor.id}, ${id}, ${visitKey})
+				on conflict (user_id, board_id) do update set last_opened_at = now(),
+					link_key = coalesce(excluded.link_key, board_visits.link_key)
 			`;
 		}
 		// Tell the board who this is. Always set (or cleared) here, so a client can't supply its own.

@@ -358,6 +358,7 @@ export function Landing() {
 					<a href={BOARD_URL}>Board</a>
 					<a href="/dashboard">Dashboard</a>
 					<a href="#templates">Templates</a>
+					<a href="/privacy">Privacy</a>
 				</nav>
 				<span>© {new Date().getFullYear()} Flowyard</span>
 			</footer>

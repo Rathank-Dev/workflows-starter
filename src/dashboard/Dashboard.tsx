@@ -3,6 +3,7 @@ import type { Board } from "../../shared/board";
 import { TEMPLATES, buildTemplate, type FlowTemplate } from "../../shared/templates";
 import { AccountButton, SignInDialog } from "../board/account";
 import { FlowPreview } from "../board/FlowPreview";
+import { boardPath } from "../board/linkKey";
 import { Icons, Mark } from "../board/icons";
 import { PROVIDER_LABEL, signInUrl, type Session } from "../session";
 import "./dashboard.css";
@@ -13,6 +14,8 @@ type Sort = "opened" | "name" | "created";
 
 interface Row {
 	id: string;
+	/** Share key: board links need it to open for anyone but the owner and members. Null for members. */
+	key: string | null;
 	name: string;
 	is_owner: boolean;
 	owner_name: string;
@@ -153,12 +156,12 @@ export function Dashboard({ session }: { session: Session }) {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ doc }),
 			});
-			const data = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+			const data = (await res.json().catch(() => null)) as { id?: string; key?: string; error?: string } | null;
 			if (!res.ok || !data?.id) {
 				say(data?.error ?? "Couldn't create the board. Try again.");
 				return;
 			}
-			window.location.assign(`/board?board=${data.id}`);
+			window.location.assign(boardPath(data.id, data.key));
 		} catch {
 			say("Couldn't reach the server. Check your connection.");
 		} finally {
@@ -173,10 +176,10 @@ export function Dashboard({ session }: { session: Session }) {
 		const post = (path: string, body?: unknown) =>
 			fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 		if (action === "copy") {
-			const link = `${window.location.origin}/board?board=${r.id}`;
+			const link = `${window.location.origin}${boardPath(r.id, r.key)}`;
 			try {
 				await navigator.clipboard.writeText(link);
-				say("Link copied. Anyone with it can view and edit.");
+				say("Board link copied. Change who it lets in from the board's Share menu.");
 			} catch {
 				window.prompt("Copy this link:", link);
 			}
@@ -443,7 +446,7 @@ export function Dashboard({ session }: { session: Session }) {
 													<span>Deleted forever in {daysLeft(r.deleted_at!, trashDays)} days</span>
 												</span>
 											) : (
-												<a className="board-name-cell" href={`/board?board=${r.id}`}>
+												<a className="board-name-cell" href={boardPath(r.id, r.key)}>
 													<strong>{r.name}</strong>
 													<span>Updated {when(r.updated_at)}</span>
 												</a>
@@ -532,7 +535,7 @@ function RowMenu({
 						</>
 					) : (
 						<>
-							<a role="menuitem" href={`/board?board=${row.id}`}>
+							<a role="menuitem" href={boardPath(row.id, row.key)}>
 								<Icons.open />
 								Open
 							</a>
