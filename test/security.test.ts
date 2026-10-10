@@ -145,7 +145,7 @@ describe("BoardDO connection cap", () => {
 describe("auth cookies", () => {
 	it("uses __Host- cookies that browsers protect from subdomains", async () => {
 		const { setCookie } = await import("../worker/http");
-		const header = setCookie("__Host-lw_session", "t", { maxAge: 60 });
+		const header = setCookie("__Host-flowyard_session", "t", { maxAge: 60 });
 		// The __Host- prefix is only honoured with Secure, Path=/ and no Domain
 		expect(header).toContain("Secure");
 		expect(header).toContain("Path=/;");
@@ -154,7 +154,24 @@ describe("auth cookies", () => {
 			method: "POST",
 			headers: { Origin: ORIGIN, "CF-Connecting-IP": "10.0.0.7" },
 		});
-		expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-lw_session=; Path=\/; Max-Age=0; HttpOnly; Secure; SameSite=Lax$/);
+		// Signing out clears the session under its current name and its pre-rename one
+		expect(res.headers.getSetCookie()).toEqual([
+			"__Host-flowyard_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+			"__Host-lw_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+		]);
+	});
+
+	it("moves a pre-rename session cookie to the new name, once", async () => {
+		const get = (cookie: string) =>
+			SELF.fetch(`${ORIGIN}/api/no-such-route`, { headers: { Cookie: cookie, "CF-Connecting-IP": "10.0.0.8" } });
+		const moved = (await get("__Host-lw_session=tok123")).headers.getSetCookie();
+		expect(moved).toEqual([
+			"__Host-flowyard_session=tok123; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax",
+			"__Host-lw_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+		]);
+		// Already on the new name: nothing to do
+		expect((await get("__Host-flowyard_session=tok123; __Host-lw_session=old")).headers.getSetCookie()).toEqual([]);
+		expect((await get("other=1")).headers.getSetCookie()).toEqual([]);
 	});
 });
 
@@ -191,7 +208,7 @@ describe("cookies", () => {
 
 	it("treats a malformed session cookie as signed out, not a server error", async () => {
 		const res = await SELF.fetch(`${ORIGIN}/api/me`, {
-			headers: { Cookie: "__Host-lw_session=%E0%A4%A", "CF-Connecting-IP": "10.7.0.2" },
+			headers: { Cookie: "__Host-flowyard_session=%E0%A4%A", "CF-Connecting-IP": "10.7.0.2" },
 		});
 		expect(res.status).toBe(200);
 		expect(await res.json()).toMatchObject({ user: null });
@@ -206,7 +223,7 @@ describe("cookies", () => {
 		const agreed = await post("/api/referral/remember", { code: "abcd2345" });
 		expect(agreed.status).toBe(204);
 		const cookie = agreed.headers.get("Set-Cookie") ?? "";
-		expect(cookie).toMatch(/^__Host-lw_ref=abcd2345;/);
+		expect(cookie).toMatch(/^__Host-flowyard_ref=abcd2345;/);
 		expect(cookie).toMatch(/HttpOnly/);
 		expect(cookie).toMatch(/Secure/);
 		expect(cookie).toMatch(/SameSite=Lax/);
@@ -222,6 +239,6 @@ describe("cookies", () => {
 		});
 		expect(res.status).toBe(204);
 		expect(res.headers.get("Clear-Site-Data")).toBe('"cache"');
-		expect(res.headers.get("Set-Cookie")).toMatch(/^__Host-lw_session=; .*Max-Age=0/);
+		expect(res.headers.getSetCookie()[0]).toMatch(/^__Host-flowyard_session=; .*Max-Age=0/);
 	});
 });

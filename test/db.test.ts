@@ -25,7 +25,7 @@ describe.skipIf(!enabled)("with Postgres", () => {
 		const [u] = await sql<{ id: string }[]>`insert into users (name) values (${name}) returning id`;
 		const token = randomToken();
 		await sql`insert into sessions (id, user_id, expires_at) values (${await sha256Hex(token)}, ${u.id}, now() + interval '30 days')`;
-		return { id: u.id, name, email: null, avatar_url: null, token, cookie: `__Host-lw_session=${token}` };
+		return { id: u.id, name, email: null, avatar_url: null, token, cookie: `__Host-flowyard_session=${token}` };
 	}
 
 	async function board(ownerId: string, linkAccess: "edit" | "view" | "none" = "edit") {
@@ -134,6 +134,18 @@ describe.skipIf(!enabled)("with Postgres", () => {
 		} finally {
 			await sql.unsafe(`drop trigger ${fn} on board_visits; drop function ${fn}();`);
 		}
+	});
+
+	it("keeps people signed in through the cookie rename, and moves them to the new name", async () => {
+		const u = await user("Before rename");
+		const res = await SELF.fetch(`${ORIGIN}/api/me`, {
+			headers: { Cookie: `__Host-lw_session=${u.token}`, "CF-Connecting-IP": ip() },
+		});
+		expect(((await res.json()) as { user: { id: string } | null }).user?.id).toBe(u.id);
+		expect(res.headers.getSetCookie()).toEqual([
+			`__Host-flowyard_session=${u.token}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`,
+			"__Host-lw_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+		]);
 	});
 
 	it("ends sessions after 7 days unused, and refreshes use at most hourly", async () => {

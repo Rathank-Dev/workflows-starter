@@ -1,8 +1,8 @@
 import { DELETION_GRACE_DAYS, TRASH_DAYS, boardStore, disconnectEverywhere, requestDeletion } from "./account";
 import { remainingUses, DAILY_LIMIT } from "./ai";
 import type { Sql, User } from "./db";
-import { SESSION_COOKIE } from "./auth";
-import { CLEAR_CACHE, error, json, setCookie } from "./http";
+import { clearSessionCookies } from "./auth";
+import { CLEAR_CACHE, error, json } from "./http";
 
 export interface DashboardBoard {
 	id: string;
@@ -131,7 +131,7 @@ export async function logoutEverywhere(sql: Sql, env: Env, user: User): Promise<
 	await disconnectEverywhere(sql, boardStore(env), user.id);
 	return new Response(null, {
 		status: 204,
-		headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
+		headers: [...clearSessionCookies(), ...Object.entries(CLEAR_CACHE)],
 	});
 }
 
@@ -147,6 +147,6 @@ export async function deleteAccount(request: Request, sql: Sql, env: Env, user: 
 	return json(
 		{ deleteAt, graceDays: DELETION_GRACE_DAYS },
 		200,
-		{ "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
+		[...clearSessionCookies(), ...Object.entries(CLEAR_CACHE)],
 	);
 }

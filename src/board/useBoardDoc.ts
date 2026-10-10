@@ -32,7 +32,7 @@ const MAX_RETRY_MS = 15_000;
 
 /** null is the browser-only board you get without signing in. */
 function localKey(boardId: string | null) {
-	return boardId ? `linework:board:${boardId}` : "linework:local";
+	return boardId ? `flowyard:board:${boardId}` : "flowyard:local";
 }
 
 function loadLocal(boardId: string | null): Board | null {
@@ -54,7 +54,7 @@ export function saveLocal(boardId: string | null, board: Board) {
 
 function loadRole(boardId: string): BoardRole {
 	try {
-		const r = localStorage.getItem(`linework:role:${boardId}`);
+		const r = localStorage.getItem(`flowyard:role:${boardId}`);
 		return r === "owner" || r === "edit" || r === "view" ? r : "edit";
 	} catch {
 		return "edit";
@@ -63,7 +63,7 @@ function loadRole(boardId: string): BoardRole {
 
 function saveRole(boardId: string, role: BoardRole) {
 	try {
-		localStorage.setItem(`linework:role:${boardId}`, role);
+		localStorage.setItem(`flowyard:role:${boardId}`, role);
 	} catch {
 		// Storage blocked; the server still enforces the role
 	}
