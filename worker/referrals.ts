@@ -9,7 +9,9 @@ import { getCookie, json, setCookie } from "./http";
  * The referral cookie isn't needed for the site to work, so it's only set
  * once the visitor agrees to it in the cookie banner.
  */
-export const REFERRAL_COOKIE = "__Host-lw_ref";
+export const REFERRAL_COOKIE = "__Host-flowyard_ref";
+/** Pre-rename name ("lw" was Linework), still read until it expires. Remove after 2026-11-10. */
+export const LEGACY_REFERRAL_COOKIE = "__Host-lw_ref";
 const REFERRAL_DAYS = 30;
 const CODE = /^[a-z0-9]{8}$/;
 const ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
@@ -36,7 +38,7 @@ export async function rememberReferral(request: Request): Promise<Response> {
 
 /** The referral code from this request's cookie, if any. */
 export function referralFrom(request: Request): string | null {
-	const code = getCookie(request, REFERRAL_COOKIE);
+	const code = getCookie(request, REFERRAL_COOKIE) ?? getCookie(request, LEGACY_REFERRAL_COOKIE);
 	return code && CODE.test(code) ? code : null;
 }
 

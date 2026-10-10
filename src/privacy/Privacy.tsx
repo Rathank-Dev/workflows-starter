@@ -4,15 +4,15 @@ import { resetCookieChoice } from "../consent";
 import "./privacy.css";
 
 const COOKIES: [name: string, purpose: string, lasts: string, needed: string][] = [
-	["__Host-lw_session", "Keeps you signed in. Holds a random token; the server stores only its hash.", "30 days, or 7 days unused", "Necessary"],
-	["__Host-lw_oauth", "Checks that a sign-in that comes back from GitHub, Google, or Discord is the one you started.", "10 minutes", "Necessary"],
-	["__Host-lw_ref", "Remembers who invited you, so they're credited if you sign up.", "30 days", "Only if you accept"],
+	["__Host-flowyard_session", "Keeps you signed in. Holds a random token; the server stores only its hash.", "30 days, or 7 days unused", "Necessary"],
+	["__Host-flowyard_oauth", "Checks that a sign-in that comes back from GitHub, Google, or Discord is the one you started.", "10 minutes", "Necessary"],
+	["__Host-flowyard_ref", "Remembers who invited you, so they're credited if you sign up.", "30 days", "Only if you accept"],
 ];
 
 const STORAGE: [key: string, purpose: string][] = [
-	["linework:local", "The board you draw without signing in. It never leaves this browser unless you share it."],
-	["linework:board:…, linework:role:…", "A copy of shared boards you open, so they load fast and survive going offline. Cleared when you sign out."],
-	["linework:ai-provider", "Which assistant you picked last."],
+	["flowyard:local", "The board you draw without signing in. It never leaves this browser unless you share it."],
+	["flowyard:board:…, flowyard:role:…", "A copy of shared boards you open, so they load fast and survive going offline. Cleared when you sign out."],
+	["flowyard:ai-provider", "Which assistant you picked last."],
 	["flowyard:cookies", "Your cookie choice, so this banner doesn't ask again."],
 ];
 

@@ -1,6 +1,6 @@
 import { Discord, GitHub, Google, decodeIdToken, generateCodeVerifier, generateState } from "arctic";
 import { SESSION_IDLE_DAYS, cancelPendingDeletion } from "./account";
-import { REFERRAL_COOKIE, referralFrom } from "./referrals";
+import { LEGACY_REFERRAL_COOKIE, REFERRAL_COOKIE, referralFrom } from "./referrals";
 import type { Sql, User } from "./db";
 import { CLEAR_CACHE, error, getCookie, randomToken, safeReturnTo, setCookie, sha256Hex } from "./http";
 
@@ -9,9 +9,45 @@ const PROVIDERS: Provider[] = ["github", "google", "discord"];
 
 // __Host- cookies must be Secure, Path=/, and carry no Domain, so a sibling
 // subdomain can't plant or overwrite them.
-export const SESSION_COOKIE = "__Host-lw_session";
-const STATE_COOKIE = "__Host-lw_oauth";
+export const SESSION_COOKIE = "__Host-flowyard_session";
+const STATE_COOKIE = "__Host-flowyard_oauth";
 const SESSION_DAYS = 30;
+
+/**
+ * Names from before the rename to Flowyard ("lw" was Linework). Still read so
+ * nobody is signed out; a session cookie is moved to the new name the first
+ * time it's seen. Remove after 2026-11-10, when every old session has expired.
+ */
+export const LEGACY_SESSION_COOKIE = "__Host-lw_session";
+const LEGACY_STATE_COOKIE = "__Host-lw_oauth";
+
+/** The session token from either cookie name, new first. */
+function sessionToken(request: Request): string | null {
+	return getCookie(request, SESSION_COOKIE) ?? getCookie(request, LEGACY_SESSION_COOKIE);
+}
+
+/** Set-Cookie values that sign this browser out, under both names. */
+export function clearSessionCookies(): [string, string][] {
+	return [
+		["Set-Cookie", setCookie(SESSION_COOKIE, "", { maxAge: 0 })],
+		["Set-Cookie", setCookie(LEGACY_SESSION_COOKIE, "", { maxAge: 0 })],
+	];
+}
+
+/**
+ * Moves a pre-rename session cookie to the new name, unless the response is
+ * already setting or clearing the session (sign-in, sign-out). Sockets can't
+ * carry new headers, so they're left alone; the next API call does it.
+ */
+export function upgradeLegacySession(request: Request, res: Response): Response {
+	if (res.status === 101 || res.webSocket) return res;
+	const legacy = getCookie(request, LEGACY_SESSION_COOKIE);
+	if (!legacy || legacy.length > 200 || getCookie(request, SESSION_COOKIE) !== null) return res;
+	if (res.headers.getSetCookie().some((c) => c.startsWith(`${SESSION_COOKIE}=`))) return res;
+	res.headers.append("Set-Cookie", setCookie(SESSION_COOKIE, legacy, { maxAge: SESSION_DAYS * 86400 }));
+	res.headers.append("Set-Cookie", setCookie(LEGACY_SESSION_COOKIE, "", { maxAge: 0 }));
+	return res;
+}
 
 /** Providers whose client id and secret are both set. */
 export function enabledProviders(env: Env): Provider[] {
@@ -136,18 +172,23 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 	const url = new URL(request.url);
 	const provider = asProvider(providerName, env);
 	const clearState = setCookie(STATE_COOKIE, "", { maxAge: 0 });
+	const clearLegacyState = setCookie(LEGACY_STATE_COOKIE, "", { maxAge: 0 });
 	// Only a fixed code goes in the URL; the client maps it to a message, so a
 	// crafted link can't put arbitrary text on the page.
 	const fail = (code: "unavailable" | "expired" | "cancelled" | "failed") =>
 		new Response(null, {
 			status: 302,
-			headers: { Location: `/board?signin_error=${code}`, "Set-Cookie": clearState },
+			headers: [
+				["Location", `/board?signin_error=${code}`],
+				["Set-Cookie", clearState],
+				["Set-Cookie", clearLegacyState],
+			],
 		});
 
 	if (!provider) return fail("unavailable");
 	let saved: { p: string; s: string; v: string; r: string };
 	try {
-		saved = JSON.parse(getCookie(request, STATE_COOKIE) ?? "");
+		saved = JSON.parse(getCookie(request, STATE_COOKIE) ?? getCookie(request, LEGACY_STATE_COOKIE) ?? "");
 	} catch {
 		return fail("expired");
 	}
@@ -178,8 +219,14 @@ export async function finishLogin(request: Request, env: Env, sql: Sql, provider
 
 	const headers = new Headers({ Location: restored ? "/dashboard?account_restored=1" : safeReturnTo(saved.r) });
 	headers.append("Set-Cookie", clearState);
-	if (referralFrom(request)) headers.append("Set-Cookie", setCookie(REFERRAL_COOKIE, "", { maxAge: 0 }));
+	headers.append("Set-Cookie", clearLegacyState);
+	if (referralFrom(request)) {
+		headers.append("Set-Cookie", setCookie(REFERRAL_COOKIE, "", { maxAge: 0 }));
+		headers.append("Set-Cookie", setCookie(LEGACY_REFERRAL_COOKIE, "", { maxAge: 0 }));
+	}
 	headers.append("Set-Cookie", setCookie(SESSION_COOKIE, token, { maxAge: SESSION_DAYS * 86400 }));
+	// Signing in replaces any pre-rename session cookie
+	headers.append("Set-Cookie", setCookie(LEGACY_SESSION_COOKIE, "", { maxAge: 0 }));
 	return new Response(null, { status: 302, headers });
 }
 
@@ -221,7 +268,7 @@ async function upsertUser(sql: Sql, provider: Provider, p: Profile, referralCode
  * hourly, so most requests don't write.
  */
 export async function currentUser(request: Request, sql: Sql): Promise<User | null> {
-	const token = getCookie(request, SESSION_COOKIE);
+	const token = sessionToken(request);
 	if (!token || token.length > 200) return null;
 	const id = await sha256Hex(token);
 	const [row] = await sql<(User & { stale: boolean })[]>`
@@ -237,10 +284,10 @@ export async function currentUser(request: Request, sql: Sql): Promise<User | nu
 
 /** POST /auth/logout */
 export async function logout(request: Request, sql: Sql): Promise<Response> {
-	const token = getCookie(request, SESSION_COOKIE);
+	const token = sessionToken(request);
 	if (token) await sql`delete from sessions where id = ${await sha256Hex(token)}`;
 	return new Response(null, {
 		status: 204,
-		headers: { "Set-Cookie": setCookie(SESSION_COOKIE, "", { maxAge: 0 }), ...CLEAR_CACHE },
+		headers: [...clearSessionCookies(), ...Object.entries(CLEAR_CACHE)],
 	});
 }

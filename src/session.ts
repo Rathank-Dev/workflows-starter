@@ -64,12 +64,12 @@ export type Session = ReturnType<typeof useSession>;
 /**
  * Signing out: remove this browser's copies of shared boards and the roles
  * seen on them (see useBoardDoc), so the next person at this computer can't
- * read them. The signed-out board ("linework:local") is the user's own and stays.
+ * read them. The signed-out board ("flowyard:local") is the user's own and stays.
  */
 export function forgetSharedBoards() {
 	try {
 		for (const key of Object.keys(localStorage)) {
-			if (key.startsWith("linework:board:") || key.startsWith("linework:role:")) localStorage.removeItem(key);
+			if (key.startsWith("flowyard:board:") || key.startsWith("flowyard:role:")) localStorage.removeItem(key);
 		}
 	} catch {
 		// Storage blocked: nothing was saved

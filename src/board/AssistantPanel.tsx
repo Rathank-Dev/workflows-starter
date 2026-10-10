@@ -50,7 +50,7 @@ export function AssistantPanel({
 	const listRef = useRef<HTMLDivElement>(null);
 	const [providerId, setProviderId] = useState<string>(() => {
 		try {
-			return localStorage.getItem("linework:ai-provider") ?? "";
+			return localStorage.getItem("flowyard:ai-provider") ?? "";
 		} catch {
 			return "";
 		}
@@ -59,7 +59,7 @@ export function AssistantPanel({
 	const pickProvider = (id: string) => {
 		setProviderId(id);
 		try {
-			localStorage.setItem("linework:ai-provider", id);
+			localStorage.setItem("flowyard:ai-provider", id);
 		} catch {
 			// Storage blocked; the choice lasts for this visit
 		}

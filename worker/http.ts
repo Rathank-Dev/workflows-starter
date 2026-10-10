@@ -7,7 +7,11 @@ export const SECURITY_HEADERS: Record<string, string> = {
 
 export function json(data: unknown, status = 200, headers?: HeadersInit): Response {
 	const h = new Headers(SECURITY_HEADERS);
-	new Headers(headers).forEach((v, k) => h.set(k, v));
+	// Set-Cookie can repeat (e.g. clearing two cookies); everything else replaces
+	for (const [k, v] of new Headers(headers)) {
+		if (k === "set-cookie") h.append(k, v);
+		else h.set(k, v);
+	}
 	return Response.json(data, { status, headers: h });
 }
 

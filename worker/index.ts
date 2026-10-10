@@ -1,7 +1,7 @@
 import { MAX_DOC_BYTES, parseBoard } from "../shared/board";
 import { DAILY_LIMIT, handleAi, remainingUses } from "./ai";
 import { publicOptions } from "./ai-providers";
-import { currentUser, enabledProviders, finishLogin, logout, startLogin } from "./auth";
+import { currentUser, enabledProviders, finishLogin, logout, startLogin, upgradeLegacySession } from "./auth";
 import {
 	deleteAccount,
 	getProfile,
@@ -122,7 +122,7 @@ export default {
 		let sql: Sql | null = null;
 		const db = () => (sql ??= connect(env));
 		try {
-			return withSecurityHeaders(await route(request, env, url, db, ctx));
+			return upgradeLegacySession(request, withSecurityHeaders(await route(request, env, url, db, ctx)));
 		} catch (err) {
 			console.error("Unhandled error", path, err);
 			return error("Something went wrong on the server. Try again.", 500);
