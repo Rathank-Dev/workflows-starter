@@ -263,6 +263,9 @@ export function Dashboard({ session }: { session: Session }) {
 							))}
 						</div>
 					)}
+					<p className="dialog-note">
+						By signing in you agree to the <a href="/terms">terms</a> and <a href="/privacy">privacy policy</a>.
+					</p>
 					<a className="text-link" href="/board">
 						Or keep drawing without an account
 					</a>

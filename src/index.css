@@ -923,6 +923,10 @@ button:not(:disabled):active,
 	font-size: 13px;
 }
 
+.dialog-note a {
+	color: var(--teal);
+}
+
 .provider-list {
 	display: flex;
 	flex-direction: column;

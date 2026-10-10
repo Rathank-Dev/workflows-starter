@@ -42,7 +42,12 @@ export function Privacy() {
 					Privacy and <em>cookies.</em>
 				</h1>
 				<p className="pv-lede">
-					What Flowyard keeps in your browser and on its servers, who else is involved, and how to change your choices.
+					What Flowyard keeps in your browser and on its servers, who else is involved, and how to change your choices. The rules
+					for using Flowyard are in the{" "}
+					<a className="pv-link" href="/terms">
+						terms of service
+					</a>
+					.
 				</p>
 
 				<section aria-labelledby="pv-cookies">

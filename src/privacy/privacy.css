@@ -53,6 +53,10 @@
 	margin: 16px 0 8px;
 }
 
+.pv-link {
+	color: var(--teal);
+}
+
 .pv-main section {
 	margin-top: 40px;
 }
