@@ -21,8 +21,9 @@ In scope, on `/dashboard` only:
 
 Out of scope here (later projects, in this order):
 
-- **Board start experience:** welcome card with an assistant prompt on new boards, a template gallery (grow from 5 to about 12 templates), assistant panel polish, board loading skeleton.
-- **Sign-up:** "your board is ready" sign-in screen over a blurred preview; email sign-in links (needs `flowyard.dev` registered and an email-sending service); interface languages (which ones to be decided).
+1. **Homepage redesign:** keep the dark linework style, borrow Miro's structure (an assistant-prompt hero over a live canvas with cursors, use-case tabs, a feature grid, getting-started tiles, a richer footer). No invented numbers, testimonials, or certification badges.
+2. **Board start experience:** welcome card with an assistant prompt on new boards, a template gallery (grow from 5 to about 12 templates), assistant panel polish, board loading skeleton.
+3. **Sign-up:** "your board is ready" sign-in screen over a blurred preview; email sign-in links (needs `flowyard.dev` registered and an email-sending service); interface languages (which ones to be decided).
 
 ## Approach
 
