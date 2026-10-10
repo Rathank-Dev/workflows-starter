@@ -91,6 +91,8 @@ export class BoardDO extends DurableObject<Env> {
 		super(ctx, env);
 		this.sql = ctx.storage.sql;
 		this.ensureTable();
+		// Heartbeats are answered by the runtime without waking this object (or billing for it)
+		ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
 	}
 
 	private ensureTable(): void {

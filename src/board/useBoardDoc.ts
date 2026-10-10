@@ -20,6 +20,15 @@ export interface Cursor {
 const HISTORY_LIMIT = 200;
 const SEND_EVERY_MS = 120;
 const CURSOR_EVERY_MS = 50;
+/**
+ * Heartbeat: a socket can look open long after the network under it is gone
+ * (sleep, Wi-Fi change). Ping regularly; no pong in time means reconnect.
+ * The board's Durable Object answers pings without waking up.
+ */
+const PING_EVERY_MS = 25_000;
+const PONG_WITHIN_MS = 10_000;
+/** Reconnect delays grow to this, with jitter so a restart doesn't bring everyone back at once. */
+const MAX_RETRY_MS = 15_000;
 
 /** null is the browser-only board you get without signing in. */
 function localKey(boardId: string | null) {
@@ -194,19 +203,60 @@ export function useBoardDoc(boardId: string | null) {
 		let closed = false;
 		let attempt = 0;
 		let retry: ReturnType<typeof setTimeout> | null = null;
+		let heartbeat: ReturnType<typeof setInterval> | null = null;
+		let pongDue: ReturnType<typeof setTimeout> | null = null;
+		/** Pings the current socket; replaced on each connect. */
+		let pingNow: () => void = () => {};
+
+		const stopHeartbeat = () => {
+			if (heartbeat) clearInterval(heartbeat);
+			if (pongDue) clearTimeout(pongDue);
+			heartbeat = pongDue = null;
+		};
+
+		/** The connection dropped: retry with backoff. One blip shows "Connecting…", not "Offline". */
+		const reconnectLater = () => {
+			stopHeartbeat();
+			setPresence(1);
+			setCursors(new Map());
+			alone.current = true;
+			attempt += 1;
+			setStatus(attempt > 1 ? "offline" : "connecting");
+			const delay = Math.min(MAX_RETRY_MS, 500 * 2 ** attempt);
+			retry = setTimeout(connect, delay / 2 + Math.random() * (delay / 2));
+		};
 
 		const connect = () => {
+			retry = null;
 			setStatus((s) => (s === "live" ? "connecting" : s));
 			const protocol = location.protocol === "https:" ? "wss:" : "ws:";
 			const socket = new WebSocket(`${protocol}//${location.host}${withKey(`/ws?board=${encodeURIComponent(boardId)}`)}`);
 			ws.current = socket;
 
+			pingNow = () => {
+				if (socket.readyState !== WebSocket.OPEN || pongDue) return;
+				socket.send("ping");
+				pongDue = setTimeout(() => {
+					// No answer: the socket is dead even if the browser hasn't noticed
+					socket.onclose = null;
+					socket.close();
+					if (ws.current === socket) ws.current = null;
+					if (!closed) reconnectLater();
+				}, PONG_WITHIN_MS);
+			};
+
 			socket.onopen = () => {
 				attempt = 0;
+				heartbeat = setInterval(pingNow, PING_EVERY_MS);
 				setStatus("live");
 				setError(null);
 			};
 			socket.onmessage = (event) => {
+				if (event.data === "pong") {
+					if (pongDue) clearTimeout(pongDue);
+					pongDue = null;
+					return;
+				}
 				let msg: {
 				type?: string;
 				doc?: unknown;
@@ -280,6 +330,7 @@ export function useBoardDoc(boardId: string | null) {
 			};
 			socket.onclose = (event) => {
 				if (ws.current === socket) ws.current = null;
+				stopHeartbeat();
 				if (closed) return;
 				if (event.code === 4404) {
 					setStatus("deleted");
@@ -291,14 +342,23 @@ export function useBoardDoc(boardId: string | null) {
 					retry = setTimeout(connect, 50);
 					return;
 				}
-				setStatus("offline");
-				setPresence(1);
-				setCursors(new Map());
-				alone.current = true;
-				attempt += 1;
-				retry = setTimeout(connect, Math.min(15_000, 500 * 2 ** attempt));
+				reconnectLater();
 			};
 		};
+
+		/** Back online, or back to this tab: check the connection now instead of waiting. */
+		const wake = () => {
+			if (closed || document.visibilityState === "hidden") return;
+			const socket = ws.current;
+			if (socket?.readyState === WebSocket.OPEN) pingNow();
+			else if (!socket && retry) {
+				clearTimeout(retry);
+				attempt = 0;
+				connect();
+			}
+		};
+		window.addEventListener("online", wake);
+		document.addEventListener("visibilitychange", wake);
 		// Deferred so React StrictMode's mount/unmount/mount opens one socket, not two.
 		setDenied(null);
 		retry = setTimeout(connect, 0);
@@ -306,6 +366,9 @@ export function useBoardDoc(boardId: string | null) {
 		return () => {
 			closed = true;
 			if (retry) clearTimeout(retry);
+			stopHeartbeat();
+			window.removeEventListener("online", wake);
+			document.removeEventListener("visibilitychange", wake);
 			ws.current?.close();
 			ws.current = null;
 			setCursors(new Map());

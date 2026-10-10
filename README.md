@@ -12,7 +12,16 @@ npm run dev                      # homepage at http://localhost:5173, board at /
 npm test
 ```
 
-Without signing in, anyone can draw; the board is saved in their browser. Creating a share link needs a sign-in (GitHub, Google, or Discord). Anyone with a share link can open and edit that board live, signed in or not.
+`npm test` skips the database tests unless you point them at a **throwaway** Postgres (never production; they write test users and boards):
+
+```bash
+DATABASE_URL=postgres://test:test@localhost:5432/test npm run db:migrate
+TEST_DATABASE_URL=postgres://test:test@localhost:5432/test npm test
+```
+
+CI does this on every pull request with a Postgres container.
+
+Without signing in, anyone can draw; the board is saved in their browser. Creating a share link needs a sign-in (GitHub, Google, or Discord). Anyone with a share link and its key can open the board live, with the access the owner chose.
 
 ### Configuration (`.dev.vars` locally, `wrangler secret put` in production)
 

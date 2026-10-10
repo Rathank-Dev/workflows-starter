@@ -103,23 +103,25 @@ export async function restoreBoard(sql: Sql, user: User, id: string): Promise<Re
 
 /** GET /api/profile */
 export async function getProfile(sql: Sql, user: User): Promise<Response> {
-	const [details] = await sql<{ created_at: Date; email: string | null }[]>`
-		select created_at, email from users where id = ${user.id}
-	`;
-	const accounts = await sql<{ provider: string; created_at: Date }[]>`
-		select provider, created_at from oauth_accounts where user_id = ${user.id} order by created_at
-	`;
-	const [{ boards }] = await sql<{ boards: number }[]>`
-		select count(*)::int as boards from boards where owner_id = ${user.id} and deleted_at is null
-	`;
-	const [{ sessions }] = await sql<{ sessions: number }[]>`
-		select count(*)::int as sessions from sessions where user_id = ${user.id} and expires_at > now()
-	`;
+	// Independent reads, sent together (postgres.js pipelines them on one connection)
+	const [[details], accounts, [{ boards }], [{ sessions }], aiRemaining] = await Promise.all([
+		sql<{ created_at: Date; email: string | null }[]>`select created_at, email from users where id = ${user.id}`,
+		sql<{ provider: string; created_at: Date }[]>`
+			select provider, created_at from oauth_accounts where user_id = ${user.id} order by created_at
+		`,
+		sql<{ boards: number }[]>`
+			select count(*)::int as boards from boards where owner_id = ${user.id} and deleted_at is null
+		`,
+		sql<{ sessions: number }[]>`
+			select count(*)::int as sessions from sessions where user_id = ${user.id} and expires_at > now()
+		`,
+		remainingUses(sql, user.id),
+	]);
 	return json({
 		user: { id: user.id, name: user.name, email: details?.email ?? null, avatarUrl: user.avatar_url, createdAt: details?.created_at },
 		accounts,
 		plan: { id: "free", name: "Free" },
-		usage: { boards, aiRemaining: await remainingUses(sql, user.id), aiDailyLimit: DAILY_LIMIT, sessions },
+		usage: { boards, aiRemaining, aiDailyLimit: DAILY_LIMIT, sessions },
 	});
 }
 

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { TEMPLATES } from "../../shared/templates";
+import { AccountButton } from "../board/account";
 import { FlowPreview } from "../board/FlowPreview";
 import { Mark } from "../board/icons";
+import { useSession } from "../session";
 import "./landing.css";
 
 const BOARD_URL = "/board";
@@ -180,6 +182,7 @@ function CursorArrow() {
 }
 
 export function Landing() {
+	const session = useSession();
 	return (
 		<div className="fy">
 			<header className="fy-nav">
@@ -193,9 +196,15 @@ export function Landing() {
 					<a href="/dashboard">Dashboard</a>
 				</nav>
 				<div className="fy-nav-actions">
-					<a className="fy-btn fy-btn-link" href="/dashboard">
-						Sign in
-					</a>
+					{/* Nothing until the session loads, so signed-in people never see "Sign in" flash */}
+					{!session.loading &&
+						(session.user ? (
+							<AccountButton session={session} onSignIn={() => window.location.assign("/dashboard")} />
+						) : (
+							<a className="fy-btn fy-btn-link" href="/dashboard">
+								Sign in
+							</a>
+						))}
 					<a className="fy-btn fy-btn-outline" href={BOARD_URL}>
 						Start a board
 					</a>
