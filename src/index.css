@@ -2272,6 +2272,7 @@ button.text-link:disabled {
 	.cookie-actions > * {
 		flex: 1;
 	}
+}
 
 /* ------------------------------------------------------------------ */
 /* Shared by every page: account menu, avatars, badges, error text      */
