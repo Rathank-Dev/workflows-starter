@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Mark } from "../board/icons";
 import { resetCookieChoice } from "../consent";
+import { LEGAL_UPDATED, SUPPORT_EMAIL } from "../contact";
 import "./privacy.css";
 
 const COOKIES: [name: string, purpose: string, lasts: string, needed: string][] = [
@@ -42,8 +43,14 @@ export function Privacy() {
 					Privacy and <em>cookies.</em>
 				</h1>
 				<p className="pv-lede">
-					What Flowyard keeps in your browser and on its servers, who else is involved, and how to change your choices.
+					What Flowyard keeps in your browser and on its servers, who else is involved, and how to change your choices. The rules
+					for using Flowyard are in the{" "}
+					<a className="pv-link" href="/terms">
+						terms of service
+					</a>
+					.
 				</p>
+				<p className="pv-updated">Last updated {LEGAL_UPDATED}</p>
 
 				<section aria-labelledby="pv-cookies">
 					<h2 id="pv-cookies">Cookies</h2>
@@ -127,6 +134,17 @@ export function Privacy() {
 							</span>
 						</li>
 					</ul>
+				</section>
+
+				<section aria-labelledby="pv-contact">
+					<h2 id="pv-contact">Contact</h2>
+					<p>
+						Questions about your data, or a request to see, correct, or delete it:{" "}
+						<a className="pv-link" href={`mailto:${SUPPORT_EMAIL}`}>
+							{SUPPORT_EMAIL}
+						</a>
+						. You can also delete your account yourself from your profile.
+					</p>
 				</section>
 			</main>
 		</div>

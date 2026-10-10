@@ -84,7 +84,10 @@ export function SignInDialog({
 					))}
 				</div>
 			)}
-			<p className="dialog-note">No password needed. We only read your name and profile picture.</p>
+			<p className="dialog-note">
+				No password needed. We read your name, email, and profile picture. By signing in you agree to the{" "}
+				<a href="/terms">terms</a> and <a href="/privacy">privacy policy</a>.
+			</p>
 		</Dialog>
 	);
 }

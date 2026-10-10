@@ -10,6 +10,7 @@ const Profile = lazy(() => import("./dashboard/Profile").then((m) => ({ default:
 const Landing = lazy(() => import("./landing/Landing").then((m) => ({ default: m.Landing })));
 const NotFound = lazy(() => import("./notfound/NotFound").then((m) => ({ default: m.NotFound })));
 const Privacy = lazy(() => import("./privacy/Privacy").then((m) => ({ default: m.Privacy })));
+const Terms = lazy(() => import("./terms/Terms").then((m) => ({ default: m.Terms })));
 
 /** Shared boards have a 32-character hex id in ?board=. Anything else is the browser-only board. */
 function boardIdFromUrl(): string | null {
@@ -70,6 +71,7 @@ function Page() {
 	if (path === "/profile") return <SessionPage page="profile" />;
 	if (path === "") return <Landing />;
 	if (path === "/privacy") return <Privacy />;
+	if (path === "/terms") return <Terms />;
 	return <NotFound />;
 }
 
